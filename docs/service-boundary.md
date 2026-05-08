@@ -1,33 +1,43 @@
 # Bidding Command Boundary
 
-## Tetap di Command Service
+## In-Scope (Command/Write Side)
 
-- Place bid.
+- Place bid command.
 - Minimum increment validation.
-- Auction lifecycle dan status transition.
+- Auction lifecycle command (activate/close/cancel).
 - Anti-sniping extension.
 - Winner determination.
-- Wallet hold/release/capture orchestration.
-- Domain event/outbox untuk bid dan auction lifecycle.
+- Wallet orchestration: hold/release/capture.
+- Event publish (`BidPlaced`, `AuctionExtended`, `AuctionClosed`, `WinnerDetermined`, `AuctionUnsold`).
 
-## Tidak Masuk Command Service
+## Out-of-Scope (Query/Read Side)
 
 - `GET /api/auctions`
 - `GET /api/auctions/{auctionId}`
 - `GET /api/auctions/{auctionId}/bids`
+- Analytics/statistik query
 
-Endpoint query tersebut dimiliki oleh `bidmart-auction-query-service`.
+Endpoint query dimiliki `bidmart-auction-query-service`.
 
-## Adapter yang Dibutuhkan
+## Command API Minimal
 
-- `UserClient` untuk role dan identity.
-- `ListingClient` untuk listing active/seller validation.
-- `WalletClient` untuk hold/release/capture.
-- `AuctionEventPublisher` untuk outbox atau broker.
+- `POST /api/bids`
+- `POST /api/auctions/{auctionId}/bids`
+- `POST /api/auctions/{auctionId}/close`
+- `POST /api/auctions/{auctionId}/cancel`
 
-## Risiko Utama
+## Coupling yang Diperbolehkan Sementara
 
-- Race condition bid bersamaan.
-- Double hold wallet saat retry.
-- Auction query menampilkan status selesai tanpa command-side wallet settlement.
-- Event gagal publish setelah bid tersimpan.
+- Auth/User service untuk validasi identitas/permission.
+- Listing service untuk validasi listing snapshot.
+- Wallet service untuk transaksi hold/capture/release.
+
+## Coupling yang Harus Dihilangkan
+
+- Direct repository/entity access lintas bounded context (user/listing/wallet) dari monolith.
+- Dependensi close auction pada endpoint query legacy.
+
+## Asumsi Migrasi
+
+- Karena source code monolith branch `feat/auction-query-rollout` belum diimport ke repo ini, boundary ditetapkan sebagai kontrak awal.
+- Implementasi detail aggregate, repository, dan orchestration akan dipindahkan bertahap dari branch staging aman.

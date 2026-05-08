@@ -1,0 +1,14 @@
+package id.ac.ui.cs.advprog.biddingcommand.api.dto;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import java.math.BigDecimal;
+
+public record PlaceBidRequest(
+        @NotBlank String auctionId,
+        @NotBlank String bidderId,
+        @NotNull @DecimalMin("0.01") BigDecimal amount
+) {
+}

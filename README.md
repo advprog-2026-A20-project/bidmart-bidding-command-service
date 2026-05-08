@@ -1,35 +1,60 @@
 # BidMart Bidding Command Service
 
-Repository ini adalah target bounded context untuk bidding command BidMart. Service ini akan diekstrak dari `AuctionService` pada gateway legacy dengan pola strangler, sehingga flow lama tetap berjalan sampai contract wallet, listing, dan auth cukup stabil.
+`bidmart-bidding-command-service` adalah service command/write-side untuk domain bidding dan auction lifecycle pada arsitektur microservice BidMart.
 
-## Service Boundary
+## Fungsi Service
 
-Bidding command service idealnya menangani:
+Service ini bertanggung jawab untuk:
 
-- Place bid.
-- Validasi minimum increment.
-- Validasi auction masih aktif.
-- Auction lifecycle untuk command side.
+- Place bid command.
+- Validasi bid (minimum increment, status auction, bidder eligibility).
 - Anti-sniping extension.
-- Penentuan bid tertinggi.
+- Auction lifecycle command (close/cancel/activate jika diperlukan).
 - Winner determination.
-- Publish event setelah bid berhasil atau auction selesai.
+- Publish event untuk sinkronisasi read model dan service downstream.
 
-Service ini tidak menangani read-heavy endpoint auction list/detail/bid history. Query tersebut menjadi tanggung jawab `bidmart-auction-query-service`.
+## Batasan dengan Auction Query Service
 
-## Status Migrasi
+- **Bidding Command Service**: mutasi data/command (`POST`, state transition, orchestration wallet).
+- **Auction Query Service**: endpoint read-heavy (`GET auction list`, `GET auction detail`, `GET bid history`, leaderboard/projection).
 
-Saat ini implementasi bidding masih berada di `bidmart-gateway` legacy monolith. Repo ini berisi scaffold, kontrak event, dan boundary docs sebagai langkah awal sebelum logic dipindahkan.
+Service ini **tidak** memiliki endpoint query berat agar CQRS boundary tetap jelas.
 
-## Endpoint Target
+## Endpoint Command (Scaffold)
 
-```txt
-POST /api/auctions
-POST /api/auctions/{auctionId}/activate
-POST /api/auctions/{auctionId}/bids
-POST /api/auctions/{auctionId}/close
-GET /actuator/health
-```
+- `POST /api/bids`
+- `POST /api/auctions/{auctionId}/bids`
+- `POST /api/auctions/{auctionId}/close`
+- `POST /api/auctions/{auctionId}/cancel`
+- `GET /actuator/health`
+
+> Catatan: saat ini endpoint masih scaffold/inisialisasi dan belum terhubung ke persistence + integration client.
+
+## Event Contract Minimal
+
+Lihat detail payload di `docs/event-contracts.md`.
+
+- `BidPlaced`
+- `AuctionExtended`
+- `AuctionClosed`
+- `WinnerDetermined`
+- `AuctionUnsold`
+
+## Dependency ke Service Lain
+
+- **Auth/User service**: validasi token, profil user, role/permission.
+- **Listing service**: validasi listing snapshot dan status listing.
+- **Wallet service**: hold fund, release hold, capture hold.
+- **Auction query service**: consumer event untuk membentuk read model auction.
+
+## Data Ownership
+
+Service ini akan menjadi owner untuk aggregate command:
+
+- `Auction` (state command-side: created, active, closing, closed, cancelled).
+- `Bid` (urutan bid, leader saat ini, validasi increment).
+
+Read model tidak di-host di service ini.
 
 ## Run Lokal
 
@@ -37,11 +62,7 @@ GET /actuator/health
 ./gradlew bootRun
 ```
 
-Default port:
-
-```text
-8085
-```
+Default port: `8085`
 
 ## Test
 
@@ -49,14 +70,20 @@ Default port:
 ./gradlew test
 ```
 
-## Dependency Service Lain
+## Risiko Teknis
 
-- Auth/User service untuk user id, role, dan seller/buyer validation.
-- Listing service untuk validasi listing aktif dan seller ownership.
-- Wallet service untuk hold, release, dan capture dana.
-- Auction query service menerima projection/event dari command side.
-- Gateway meneruskan command endpoint publik.
+- Concurrent bid dapat menyebabkan race condition jika locking/versioning belum ketat.
+- Risiko double hold wallet pada retry tanpa idempotency key.
+- Stale read model antara command vs query projection.
+- Event publish gagal setelah commit command bila outbox belum diterapkan.
 
-## Catatan Kritis
+## Coupling yang Masih Harus Diputus
 
-Jangan memindahkan bidding command sebelum expired auction closure tidak lagi bergantung pada GET query. Closure harus command-side agar wallet capture/release dan event publish tetap terjadi.
+- Coupling ke model user/listing/wallet dari monolith lama (jika masih direct repository call) harus diganti jadi API client/async contract.
+- Penutupan auction yang masih bergantung query legacy harus dipindah penuh ke command-side scheduler/orchestrator.
+
+## Status Migrasi Saat Ini
+
+- Repo ini baru tahap inisialisasi service + API contract command.
+- Pemindahan class produksi dari repo monolith source branch `feat/auction-query-rollout` **belum dilakukan penuh** di repository ini.
+- Detail boundary ada di `docs/service-boundary.md`.
