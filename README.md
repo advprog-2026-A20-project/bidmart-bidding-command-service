@@ -1,68 +1,49 @@
 # BidMart Bidding Command Service
 
-`bidmart-bidding-command-service` adalah service command/write-side untuk domain bidding dan auction lifecycle pada arsitektur microservice BidMart.
+`bidmart-bidding-command-service` adalah write-side/source of truth untuk command auction dan bidding.
 
-## Fungsi Service
+## Tanggung Jawab
 
-Service ini bertanggung jawab untuk:
+- create auction command
+- activate auction command
+- place bid command
+- close auction command
+- orchestration hold/release/capture ke `bidmart-wallet-service`
 
-- Place bid command.
-- Validasi bid (minimum increment, status auction, bidder eligibility).
-- Anti-sniping extension.
-- Auction lifecycle command (close/cancel/activate jika diperlukan).
-- Winner determination.
-- Publish event untuk sinkronisasi read model dan service downstream.
+## Endpoint
 
-## Batasan dengan Auction Query Service
-
-- **Bidding Command Service**: mutasi data/command (`POST`, state transition, orchestration wallet).
-- **Auction Query Service**: endpoint read-heavy (`GET auction list`, `GET auction detail`, `GET bid history`, leaderboard/projection).
-
-Service ini **tidak** memiliki endpoint query berat agar CQRS boundary tetap jelas.
-
-## Endpoint Command (Scaffold)
-
-- `POST /api/bids`
+- `POST /api/auctions`
+- `POST /api/auctions/{auctionId}/activate`
 - `POST /api/auctions/{auctionId}/bids`
 - `POST /api/auctions/{auctionId}/close`
-- `POST /api/auctions/{auctionId}/cancel`
 - `GET /actuator/health`
 
-> Catatan: saat ini endpoint masih scaffold/inisialisasi dan belum terhubung ke persistence + integration client.
+## Ownership Data
 
-## Event Contract Minimal
+Service ini mengelola state command untuk tabel/aggregate:
 
-Lihat detail payload di `docs/event-contracts.md`.
+- `auction`
+- `bid`
+- listing snapshot command-side yang dibutuhkan untuk validasi bid
 
-- `BidPlaced`
-- `AuctionExtended`
-- `AuctionClosed`
-- `WinnerDetermined`
-- `AuctionUnsold`
+Read endpoint auction/listing tetap dilayani query services.
 
-## Dependency ke Service Lain
+## Environment
 
-- **Auth/User service**: validasi token, profil user, role/permission.
-- **Listing service**: validasi listing snapshot dan status listing.
-- **Wallet service**: hold fund, release hold, capture hold.
-- **Auction query service**: consumer event untuk membentuk read model auction.
+Lihat `.env.example`. Variabel utama:
 
-## Data Ownership
+- `PORT` (default `8084`)
+- `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`
+- `JWT_SECRET`, `JWT_EXP_SECONDS`
+- `CORS_ALLOWED_ORIGINS`
+- `WALLET_SERVICE_BASE_URL`
 
-Service ini akan menjadi owner untuk aggregate command:
-
-- `Auction` (state command-side: created, active, closing, closed, cancelled).
-- `Bid` (urutan bid, leader saat ini, validasi increment).
-
-Read model tidak di-host di service ini.
-
-## Run Lokal
+## Local Run
 
 ```bash
+cp .env.example .env
 ./gradlew bootRun
 ```
-
-Default port: `8085`
 
 ## Test
 
@@ -70,20 +51,13 @@ Default port: `8085`
 ./gradlew test
 ```
 
-## Risiko Teknis
+## Docker
 
-- Concurrent bid dapat menyebabkan race condition jika locking/versioning belum ketat.
-- Risiko double hold wallet pada retry tanpa idempotency key.
-- Stale read model antara command vs query projection.
-- Event publish gagal setelah commit command bila outbox belum diterapkan.
+```bash
+docker build -t bidmart-bidding-command-service .
+docker run --env-file .env -p 8084:8084 bidmart-bidding-command-service
+```
 
-## Coupling yang Masih Harus Diputus
+## Catatan Migrasi
 
-- Coupling ke model user/listing/wallet dari monolith lama (jika masih direct repository call) harus diganti jadi API client/async contract.
-- Penutupan auction yang masih bergantung query legacy harus dipindah penuh ke command-side scheduler/orchestrator.
-
-## Status Migrasi Saat Ini
-
-- Repo ini baru tahap inisialisasi service + API contract command.
-- Pemindahan class produksi dari repo monolith source branch `feat/auction-query-rollout` **belum dilakukan penuh** di repository ini.
-- Detail boundary ada di `docs/service-boundary.md`.
+Gateway tidak lagi menjalankan business logic auction command; endpoint command auction di gateway sekarang diproxy ke service ini.
