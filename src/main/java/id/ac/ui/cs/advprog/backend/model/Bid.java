@@ -2,14 +2,13 @@ package id.ac.ui.cs.advprog.backend.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -25,37 +24,36 @@ import lombok.Setter;
 @AllArgsConstructor
 @Builder
 @Entity
-@Table(
-    name = "bid",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"auction_id", "sequence_number"})
-)
+@Table(name = "bid")
 public class Bid {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "auction_id", nullable = false)
-    private Auction auction;
+    @Column(nullable = false)
+    private UUID auctionId;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "bidder_id", nullable = false)
-    private User bidder;
+    @Column(nullable = false)
+    private UUID bidderId;
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "sequence_number", nullable = false)
-    private Long sequenceNumber;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private BidStatus status;
 
     @Column(nullable = false)
-    private Instant submittedAt;
+    private Instant createdAt;
 
     @PrePersist
     void prePersist() {
-        if (submittedAt == null) {
-            submittedAt = Instant.now();
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
+        if (status == null) {
+            status = BidStatus.WINNING;
         }
     }
 }

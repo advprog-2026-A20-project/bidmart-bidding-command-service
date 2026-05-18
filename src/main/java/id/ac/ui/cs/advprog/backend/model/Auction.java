@@ -7,9 +7,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -33,9 +32,11 @@ public class Auction {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @OneToOne(optional = false)
-    @JoinColumn(name = "listing_id", nullable = false, unique = true)
-    private Listing listing;
+    @Column(nullable = false)
+    private UUID sellerId;
+
+    @Column(nullable = false, unique = true)
+    private UUID listingId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -44,46 +45,37 @@ public class Auction {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal startingPrice;
 
-    @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal reservePrice;
+    @Column(precision = 19, scale = 2)
+    private BigDecimal currentHighestBid;
 
-    @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal minimumBidIncrement;
-
-    @Column(nullable = false)
-    private Long durationMinutes;
-
-    @Column(nullable = false)
-    private Long nextBidSequence;
-
-    @Column(nullable = false)
-    private Integer extensionCount;
+    @Column
+    private UUID currentHighestBidderId;
 
     @Column(nullable = false)
     private Instant createdAt;
 
-    @Column
-    private Instant activatedAt;
-
-    @Column
-    private Instant startsAt;
+    @Column(nullable = false)
+    private Instant updatedAt;
 
     @Column
     private Instant endsAt;
 
-    @Column
-    private Instant closedAt;
-
     @PrePersist
     void prePersist() {
+        Instant now = Instant.now();
         if (createdAt == null) {
-            createdAt = Instant.now();
+            createdAt = now;
         }
-        if (nextBidSequence == null || nextBidSequence < 1) {
-            nextBidSequence = 1L;
+        if (updatedAt == null) {
+            updatedAt = now;
         }
-        if (extensionCount == null || extensionCount < 0) {
-            extensionCount = 0;
+        if (status == null) {
+            status = AuctionStatus.DRAFT;
         }
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = Instant.now();
     }
 }

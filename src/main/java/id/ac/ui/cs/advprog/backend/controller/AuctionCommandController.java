@@ -1,10 +1,11 @@
 package id.ac.ui.cs.advprog.backend.controller;
 
+import id.ac.ui.cs.advprog.backend.application.service.AuctionCommandService;
+import id.ac.ui.cs.advprog.backend.dto.AuctionCommandResponse;
 import id.ac.ui.cs.advprog.backend.dto.AuctionCreateRequest;
-import id.ac.ui.cs.advprog.backend.dto.AuctionDetailResponse;
+import id.ac.ui.cs.advprog.backend.dto.BidCommandResponse;
 import id.ac.ui.cs.advprog.backend.dto.BidPlaceRequest;
 import id.ac.ui.cs.advprog.backend.security.AuthenticatedUser;
-import id.ac.ui.cs.advprog.backend.service.AuctionService;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -21,48 +22,48 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auctions")
 public class AuctionCommandController {
 
-    private final AuctionService auctionService;
+    private final AuctionCommandService auctionCommandService;
 
-    public AuctionCommandController(AuctionService auctionService) {
-        this.auctionService = auctionService;
+    public AuctionCommandController(AuctionCommandService auctionCommandService) {
+        this.auctionCommandService = auctionCommandService;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('SELLER')")
-    public AuctionDetailResponse createAuction(
+    public AuctionCommandResponse createAuction(
         @Valid @RequestBody AuctionCreateRequest request,
         @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
-        return auctionService.createAuction(request, authenticatedUser.id());
+        return auctionCommandService.createAuction(request, authenticatedUser.id());
     }
 
     @PostMapping("/{auctionId}/activate")
     @PreAuthorize("hasRole('SELLER')")
-    public AuctionDetailResponse activateAuction(
+    public AuctionCommandResponse activateAuction(
         @PathVariable UUID auctionId,
         @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
-        return auctionService.activateAuction(auctionId, authenticatedUser.id());
+        return auctionCommandService.activateAuction(auctionId, authenticatedUser.id());
     }
 
     @PostMapping("/{auctionId}/bids")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('BUYER')")
-    public AuctionDetailResponse placeBid(
+    public BidCommandResponse placeBid(
         @PathVariable UUID auctionId,
         @Valid @RequestBody BidPlaceRequest request,
         @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
-        return auctionService.placeBid(auctionId, request, authenticatedUser.id());
+        return auctionCommandService.placeBid(auctionId, request, authenticatedUser.id());
     }
 
     @PostMapping("/{auctionId}/close")
     @PreAuthorize("hasRole('SELLER')")
-    public AuctionDetailResponse closeAuction(
+    public AuctionCommandResponse closeAuction(
         @PathVariable UUID auctionId,
         @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
-        return auctionService.closeAuction(auctionId, authenticatedUser.id());
+        return auctionCommandService.closeAuction(auctionId, authenticatedUser.id());
     }
 }

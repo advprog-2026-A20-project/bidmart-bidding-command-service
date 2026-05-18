@@ -1,6 +1,6 @@
 # BidMart Bidding Command Service
 
-`bidmart-bidding-command-service` adalah write-side/source of truth untuk command auction dan bidding.
+`bidmart-bidding-command-service` adalah write-side/source of truth untuk command-side auction dan bid state.
 
 ## Tanggung Jawab
 
@@ -8,7 +8,7 @@
 - activate auction command
 - place bid command
 - close auction command
-- orchestration hold/release/capture ke `bidmart-wallet-service`
+- orchestration hold/release/capture ke `bidmart-wallet-service` melalui `WalletClient`
 
 ## Endpoint
 
@@ -18,15 +18,28 @@
 - `POST /api/auctions/{auctionId}/close`
 - `GET /actuator/health`
 
+Endpoint query auction sengaja tidak disediakan di service ini. `GET /api/auctions`,
+`GET /api/auctions/{auctionId}`, dan `GET /api/auctions/{auctionId}/bids`
+dimiliki oleh `bidmart-auction-query-service`.
+
 ## Ownership Data
 
 Service ini mengelola state command untuk tabel/aggregate:
 
 - `auction`
 - `bid`
-- listing snapshot command-side yang dibutuhkan untuk validasi bid
 
-Read endpoint auction/listing tetap dilayani query services.
+Auth/user identity dan validasi listing harus masuk melalui boundary API, JWT, atau snapshot command-side.
+Service ini tidak boleh melakukan direct repository/entity coupling ke bounded context auth, listing,
+wallet, auction-query, atau listing-query.
+
+## Dependency Direction
+
+```text
+Gateway -> Bidding Command Service -> Wallet Service
+```
+
+Frontend memanggil gateway, bukan service ini secara langsung.
 
 ## Environment
 

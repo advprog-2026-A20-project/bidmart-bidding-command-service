@@ -1,6 +1,6 @@
 package id.ac.ui.cs.advprog.backend.security;
 
-import id.ac.ui.cs.advprog.backend.model.User;
+import id.ac.ui.cs.advprog.backend.model.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -9,6 +9,7 @@ import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -30,14 +31,14 @@ public class JwtService {
         this.expirationSeconds = expirationSeconds;
     }
 
-    public String generateToken(User user) {
+    public String generateToken(UUID userId, String email, Role role) {
         Instant now = Instant.now();
         return Jwts.builder()
-            .setSubject(user.getId().toString())
+            .setSubject(userId.toString())
             .setIssuedAt(Date.from(now))
             .setExpiration(Date.from(now.plusSeconds(expirationSeconds)))
-            .claim("role", user.getRole().name())
-            .claim("email", user.getEmail())
+            .claim("role", role.name())
+            .claim("email", email)
             .signWith(secretKey, SignatureAlgorithm.HS256)
             .compact();
     }
