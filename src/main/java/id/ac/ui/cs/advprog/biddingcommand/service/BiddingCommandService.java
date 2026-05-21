@@ -1,16 +1,20 @@
 package id.ac.ui.cs.advprog.biddingcommand.service;
 
+import id.ac.ui.cs.advprog.biddingcommand.dto.AuctionCreateRequest;
 import id.ac.ui.cs.advprog.biddingcommand.dto.AuctionDetailResponse;
 import id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest;
 import id.ac.ui.cs.advprog.biddingcommand.dto.BidResponse;
 import id.ac.ui.cs.advprog.biddingcommand.model.Auction;
 import id.ac.ui.cs.advprog.biddingcommand.model.AuctionStatus;
 import id.ac.ui.cs.advprog.biddingcommand.model.Bid;
+import id.ac.ui.cs.advprog.biddingcommand.model.Listing;
+import id.ac.ui.cs.advprog.biddingcommand.model.ListingCategory;
 import id.ac.ui.cs.advprog.biddingcommand.model.ListingStatus;
 import id.ac.ui.cs.advprog.biddingcommand.model.Role;
 import id.ac.ui.cs.advprog.biddingcommand.model.User;
 import id.ac.ui.cs.advprog.biddingcommand.repository.AuctionRepository;
 import id.ac.ui.cs.advprog.biddingcommand.repository.BidRepository;
+import id.ac.ui.cs.advprog.biddingcommand.repository.ListingRepository;
 import id.ac.ui.cs.advprog.biddingcommand.repository.UserRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -29,6 +33,9 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class BiddingCommandService {
 
+    private static final BigDecimal DEFAULT_MINIMUM_INCREMENT = money("1.00");
+    private static final long DEFAULT_DURATION_MINUTES = 60L;
+    private static final long MAX_DURATION_MINUTES = 14L * 24L * 60L;
     private static final Duration LAST_MINUTE_EXTENSION_WINDOW = Duration.ofMinutes(2);
     private static final Comparator<Bid> LEADING_BID_COMPARATOR = Comparator
         .comparing(Bid::getAmount)
@@ -36,6 +43,7 @@ public class BiddingCommandService {
 
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
+    private final ListingRepository listingRepository;
     private final UserRepository userRepository;
     private final WalletClient walletClient;
     private final Clock clock;
@@ -51,15 +59,46 @@ public class BiddingCommandService {
     public BiddingCommandService(
         AuctionRepository auctionRepository,
         BidRepository bidRepository,
+        ListingRepository listingRepository,
         UserRepository userRepository,
         WalletClient walletClient,
         Clock clock
     ) {
         this.auctionRepository = auctionRepository;
         this.bidRepository = bidRepository;
+        this.listingRepository = listingRepository;
         this.userRepository = userRepository;
         this.walletClient = walletClient;
         this.clock = clock;
+    }
+
+    @Transactional
+    public AuctionDetailResponse createAuction(AuctionCreateRequest request, UUID sellerId) {
+        validateAuctionRequest(request);
+        User seller = loadSeller(sellerId);
+        Instant now = Instant.now(clock);
+
+        Listing listing = createAuctionListing(request, seller, now);
+        Auction auction = buildDraftAuction(request, listing, now);
+        if (Boolean.TRUE.equals(request.activateNow())) {
+            activateAuctionInternal(auction, now);
+        } else {
+            syncListingStatus(auction);
+        }
+
+        return toDetailResponse(auctionRepository.save(auction));
+    }
+
+    @Transactional
+    public AuctionDetailResponse activateAuction(UUID auctionId, UUID sellerId) {
+        Auction auction = loadAuctionForUpdate(auctionId);
+        ensureSellerOwnsAuction(auction, sellerId);
+        if (auction.getStatus() != AuctionStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only draft auctions can be activated");
+        }
+
+        activateAuctionInternal(auction, Instant.now(clock));
+        return toDetailResponse(auctionRepository.save(auction));
     }
 
     @Transactional
@@ -71,6 +110,16 @@ public class BiddingCommandService {
         updateAuctionAfterBid(context.auction(), now);
         releasePreviousLeaderFundsIfNeeded(context);
         return toDetailResponse(context.auction());
+    }
+
+    @Transactional
+    public AuctionDetailResponse closeAuction(UUID auctionId, UUID sellerId) {
+        Auction auction = loadAuctionForUpdate(auctionId);
+        ensureSellerOwnsAuction(auction, sellerId);
+        Instant now = Instant.now(clock);
+        validateManualClosureAllowed(auction, now);
+        closeAuctionInternal(auction, now);
+        return toDetailResponse(auction);
     }
 
     private BidPlacementContext prepareBidPlacement(
@@ -153,6 +202,41 @@ public class BiddingCommandService {
         return status == AuctionStatus.ACTIVE || status == AuctionStatus.EXTENDED;
     }
 
+    private Listing createAuctionListing(AuctionCreateRequest request, User seller, Instant createdAt) {
+        Listing listing = Listing.builder()
+            .title(request.title().trim())
+            .description(request.description().trim())
+            .imageUrl(normalizeImageUrl(request.imageUrl()))
+            .price(normalizeMoney(request.startingPrice()))
+            .category(resolveCategory(request.category()))
+            .seller(seller)
+            .createdAt(createdAt)
+            .build();
+        return listingRepository.save(listing);
+    }
+
+    private Auction buildDraftAuction(AuctionCreateRequest request, Listing listing, Instant createdAt) {
+        return Auction.builder()
+            .listing(listing)
+            .status(AuctionStatus.DRAFT)
+            .startingPrice(normalizeMoney(request.startingPrice()))
+            .reservePrice(normalizeMoney(request.reservePrice()))
+            .minimumBidIncrement(normalizeMoney(defaultIncrement(request.minimumBidIncrement())))
+            .durationMinutes(defaultDuration(request.durationMinutes()))
+            .createdAt(createdAt)
+            .nextBidSequence(1L)
+            .extensionCount(0)
+            .build();
+    }
+
+    private void activateAuctionInternal(Auction auction, Instant now) {
+        auction.setStatus(AuctionStatus.ACTIVE);
+        auction.setActivatedAt(now);
+        auction.setStartsAt(now);
+        auction.setEndsAt(now.plus(Duration.ofMinutes(auction.getDurationMinutes())));
+        syncListingStatus(auction);
+    }
+
     private void validateBidAmountAgainstMinimum(Auction auction, Bid leadingBid, BigDecimal bidAmount) {
         BigDecimal nextMinimumBid = calculateNextMinimumBid(auction, leadingBid);
         if (bidAmount.compareTo(nextMinimumBid) < 0) {
@@ -229,6 +313,24 @@ public class BiddingCommandService {
             context.auction().getId(),
             previousLeader.getAmount()
         );
+    }
+
+    private void validateManualClosureAllowed(Auction auction, Instant now) {
+        if (!isBiddableStatus(auction.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Auction is already closed");
+        }
+        if (bidRepository.countByAuctionId(auction.getId()) > 0) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Auction with bids is closed automatically by the system"
+            );
+        }
+        if (auction.getEndsAt() != null && now.isBefore(auction.getEndsAt())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Auction cannot be closed before its scheduled end"
+            );
+        }
     }
 
     private void syncListingStatus(Auction auction) {
@@ -317,6 +419,56 @@ public class BiddingCommandService {
         return buyer;
     }
 
+    private User loadSeller(UUID sellerId) {
+        User seller = userRepository.findById(sellerId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+        if (seller.getRole() != Role.SELLER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only SELLER can manage auctions");
+        }
+        return seller;
+    }
+
+    private void ensureSellerOwnsAuction(Auction auction, UUID sellerId) {
+        loadSeller(sellerId);
+        if (!Objects.equals(auction.getListing().getSeller().getId(), sellerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the seller can manage this auction");
+        }
+    }
+
+    private void validateAuctionRequest(AuctionCreateRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Auction request is required");
+        }
+        if (request.title() == null || request.title().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Title is required");
+        }
+        if (request.description() == null || request.description().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Description is required");
+        }
+        if (request.startingPrice() == null || request.startingPrice().signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Starting price must be positive");
+        }
+        if (request.reservePrice() == null || request.reservePrice().signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reserve price must be positive");
+        }
+        if (request.reservePrice().compareTo(request.startingPrice()) < 0) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Reserve price must be greater than or equal to starting price"
+            );
+        }
+        if (request.minimumBidIncrement() != null && request.minimumBidIncrement().signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Minimum bid increment must be positive");
+        }
+        long durationMinutes = defaultDuration(request.durationMinutes());
+        if (durationMinutes < 1 || durationMinutes > MAX_DURATION_MINUTES) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Duration must be between 1 and " + MAX_DURATION_MINUTES + " minutes"
+            );
+        }
+    }
+
     private void validateBidRequest(BidPlaceRequest request) {
         if (request == null || request.amount() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bid amount is required");
@@ -328,5 +480,28 @@ public class BiddingCommandService {
 
     private BigDecimal normalizeMoney(BigDecimal amount) {
         return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private ListingCategory resolveCategory(ListingCategory category) {
+        return category != null ? category : ListingCategory.OTHER;
+    }
+
+    private BigDecimal defaultIncrement(BigDecimal increment) {
+        return increment == null ? DEFAULT_MINIMUM_INCREMENT : increment;
+    }
+
+    private long defaultDuration(Long durationMinutes) {
+        return durationMinutes == null ? DEFAULT_DURATION_MINUTES : durationMinutes;
+    }
+
+    private String normalizeImageUrl(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return null;
+        }
+        return imageUrl.trim();
+    }
+
+    private static BigDecimal money(String value) {
+        return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
     }
 }

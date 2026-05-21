@@ -1,6 +1,7 @@
 package id.ac.ui.cs.advprog.biddingcommand.controller;
 
 import id.ac.ui.cs.advprog.biddingcommand.dto.AuctionDetailResponse;
+import id.ac.ui.cs.advprog.biddingcommand.dto.AuctionCreateRequest;
 import id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest;
 import id.ac.ui.cs.advprog.biddingcommand.security.AuthenticatedUser;
 import id.ac.ui.cs.advprog.biddingcommand.service.BiddingCommandService;
@@ -26,6 +27,25 @@ public class BiddingCommandController {
         this.biddingCommandService = biddingCommandService;
     }
 
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('SELLER')")
+    public AuctionDetailResponse createAuction(
+        @Valid @RequestBody AuctionCreateRequest request,
+        @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return biddingCommandService.createAuction(request, authenticatedUser.id());
+    }
+
+    @PostMapping("/{auctionId}/activate")
+    @PreAuthorize("hasRole('SELLER')")
+    public AuctionDetailResponse activateAuction(
+        @PathVariable UUID auctionId,
+        @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return biddingCommandService.activateAuction(auctionId, authenticatedUser.id());
+    }
+
     @PostMapping("/{auctionId}/bids")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('BUYER')")
@@ -35,5 +55,14 @@ public class BiddingCommandController {
         @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
         return biddingCommandService.placeBid(auctionId, request, authenticatedUser.id());
+    }
+
+    @PostMapping("/{auctionId}/close")
+    @PreAuthorize("hasRole('SELLER')")
+    public AuctionDetailResponse closeAuction(
+        @PathVariable UUID auctionId,
+        @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return biddingCommandService.closeAuction(auctionId, authenticatedUser.id());
     }
 }
