@@ -17,7 +17,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || github.repository_owner }}
+      SONAR_ORGANIZATION: advprog-2026-a20-project26
       SONAR_PROJECT_KEY: ${{ github.repository_owner }}_${{ github.event.repository.name }}
 
     steps:
