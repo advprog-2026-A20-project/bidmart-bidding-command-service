@@ -17,7 +17,8 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || github.repository_owner }}
+      SONAR_PROJECT_KEY: ${{ github.repository_owner }}_${{ github.event.repository.name }}
 
     steps:
       - name: Checkout repository
@@ -37,32 +38,6 @@ jobs:
 
       - name: Run unit tests
         run: ./gradlew test
-
-      - name: Resolve Sonar project key
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          ORG="${SONAR_ORGANIZATION:-advprog-2026-a20-project}"
-          REPO="${GITHUB_REPOSITORY#*/}"
-
-          RESPONSE=$(curl -fsS -u "${SONAR_TOKEN}:" "https://sonarcloud.io/api/projects/search?organization=${ORG}&q=${REPO}")
-
-          KEY=$(echo "$RESPONSE" | jq -r --arg repo "$REPO" '
-            .components[]? | select(
-              .key == $repo
-              or .name == $repo
-              or (.key | endswith("_" + $repo))
-              or (.key | contains($repo))
-            ) | .key' | head -n 1)
-
-          if [ -z "${KEY}" ] || [ "${KEY}" = "null" ]; then
-            KEY="$REPO"
-          fi
-
-          echo "SONAR_ORGANIZATION=$ORG" >> "$GITHUB_ENV"
-          echo "SONAR_PROJECT_KEY=$KEY" >> "$GITHUB_ENV"
 
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@v6
