@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.biddingcommand;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import id.ac.ui.cs.advprog.biddingcommand.model.Auction;
@@ -64,6 +65,7 @@ class BiddingCommandLifecycleIntegrationTest {
 
     private User seller;
     private User buyer;
+    private User buyerB;
 
     @BeforeEach
     void setUp() {
@@ -73,6 +75,7 @@ class BiddingCommandLifecycleIntegrationTest {
         userRepository.deleteAll();
         seller = userRepository.save(user("seller@example.com", Role.SELLER));
         buyer = userRepository.save(user("buyer@example.com", Role.BUYER));
+        buyerB = userRepository.save(user("buyer-b@example.com", Role.BUYER));
     }
 
     @Test
@@ -122,6 +125,37 @@ class BiddingCommandLifecycleIntegrationTest {
         assertEquals(AuctionStatus.UNSOLD, refreshed.getStatus());
         assertEquals(ListingStatus.UNSOLD, refreshed.getListing().getStatus());
         verify(walletClient).releaseFunds(buyer.getId(), auction.getId(), new BigDecimal("1500.00"));
+    }
+
+    @Test
+    void higherBidFromDifferentBuyerHoldsNewBidAndReleasesPreviousLeader() {
+        Auction auction = auctionRepository.save(auction(AuctionStatus.ACTIVE, ListingStatus.ACTIVE, "1000.00"));
+        auction.setEndsAt(Instant.now().plus(10, ChronoUnit.MINUTES));
+        auctionRepository.saveAndFlush(auction);
+
+        biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(new BigDecimal("1000.00")), buyer.getId());
+        biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(new BigDecimal("2000.00")), buyerB.getId());
+
+        verify(walletClient).holdFunds(buyer.getId(), auction.getId(), new BigDecimal("1000.00"));
+        verify(walletClient).holdFunds(buyerB.getId(), auction.getId(), new BigDecimal("2000.00"));
+        verify(walletClient).releaseFunds(buyer.getId(), auction.getId(), new BigDecimal("1000.00"));
+    }
+
+    @Test
+    void higherBidFromSameBuyerOnlyHoldsDifferenceWithoutRelease() {
+        Auction auction = auctionRepository.save(auction(AuctionStatus.ACTIVE, ListingStatus.ACTIVE, "1000.00"));
+        auction.setEndsAt(Instant.now().plus(10, ChronoUnit.MINUTES));
+        auctionRepository.saveAndFlush(auction);
+
+        biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(new BigDecimal("1000.00")), buyer.getId());
+        biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(new BigDecimal("2000.00")), buyer.getId());
+
+        verify(walletClient, times(2)).holdFunds(buyer.getId(), auction.getId(), new BigDecimal("1000.00"));
+        verify(walletClient, never()).releaseFunds(
+            org.mockito.ArgumentMatchers.eq(buyer.getId()),
+            org.mockito.ArgumentMatchers.eq(auction.getId()),
+            org.mockito.ArgumentMatchers.any()
+        );
     }
 
     private User user(String email, Role role) {
