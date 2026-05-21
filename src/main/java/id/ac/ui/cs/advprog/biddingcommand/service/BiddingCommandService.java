@@ -25,7 +25,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -37,6 +39,10 @@ public class BiddingCommandService {
     private static final long DEFAULT_DURATION_MINUTES = 60L;
     private static final long MAX_DURATION_MINUTES = 14L * 24L * 60L;
     private static final Duration LAST_MINUTE_EXTENSION_WINDOW = Duration.ofMinutes(2);
+    private static final List<AuctionStatus> BIDDABLE_STATUSES = List.of(
+        AuctionStatus.ACTIVE,
+        AuctionStatus.EXTENDED
+    );
     private static final Comparator<Bid> LEADING_BID_COMPARATOR = Comparator
         .comparing(Bid::getAmount)
         .thenComparing(Bid::getSequenceNumber, Comparator.reverseOrder());
@@ -47,6 +53,7 @@ public class BiddingCommandService {
     private final UserRepository userRepository;
     private final WalletClient walletClient;
     private final Clock clock;
+    private final Duration closedVisibilityDuration;
 
     private record BidPlacementContext(
         Auction auction,
@@ -62,7 +69,9 @@ public class BiddingCommandService {
         ListingRepository listingRepository,
         UserRepository userRepository,
         WalletClient walletClient,
-        Clock clock
+        Clock clock,
+        @Value("${auction.lifecycle.closed-visible-seconds:${AUCTION_CLOSED_VISIBLE_SECONDS:5}}")
+        long closedVisibleSeconds
     ) {
         this.auctionRepository = auctionRepository;
         this.bidRepository = bidRepository;
@@ -70,6 +79,19 @@ public class BiddingCommandService {
         this.userRepository = userRepository;
         this.walletClient = walletClient;
         this.clock = clock;
+        this.closedVisibilityDuration = Duration.ofSeconds(Math.max(0L, closedVisibleSeconds));
+    }
+
+    @Scheduled(fixedDelayString = "${auction.lifecycle.scan-interval-ms:${AUCTION_LIFECYCLE_SCAN_INTERVAL_MS:1000}}")
+    @Transactional
+    public void processAuctionLifecycle() {
+        Instant now = Instant.now(clock);
+        auctionRepository.findExpiredBiddableAuctionsForUpdate(BIDDABLE_STATUSES, now)
+            .forEach(auction -> markAuctionClosed(auction, now));
+
+        Instant resolutionCutoff = now.minus(closedVisibilityDuration);
+        auctionRepository.findClosedAuctionsReadyForResolutionForUpdate(AuctionStatus.CLOSED, resolutionCutoff)
+            .forEach(this::resolveClosedAuction);
     }
 
     @Transactional
@@ -118,7 +140,7 @@ public class BiddingCommandService {
         ensureSellerOwnsAuction(auction, sellerId);
         Instant now = Instant.now(clock);
         validateManualClosureAllowed(auction, now);
-        closeAuctionInternal(auction, now);
+        markAuctionClosed(auction, now);
         return toDetailResponse(auction);
     }
 
@@ -145,7 +167,7 @@ public class BiddingCommandService {
             syncListingStatus(auction);
             return;
         }
-        closeAuctionInternal(auction, now);
+        markAuctionClosed(auction, now);
     }
 
     private boolean shouldCloseAuction(Auction auction, Instant now) {
@@ -154,15 +176,22 @@ public class BiddingCommandService {
             && !auction.getEndsAt().isAfter(now);
     }
 
-    private void closeAuctionInternal(Auction auction, Instant closedAt) {
+    private void markAuctionClosed(Auction auction, Instant closedAt) {
         if (!isBiddableStatus(auction.getStatus())) {
             return;
         }
-
-        Bid leadingBid = bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(auction.getId())
-            .orElse(null);
         auction.setStatus(AuctionStatus.CLOSED);
         auction.setClosedAt(closedAt);
+        syncListingStatus(auction);
+        auctionRepository.save(auction);
+    }
+
+    private void resolveClosedAuction(Auction auction) {
+        if (auction.getStatus() != AuctionStatus.CLOSED) {
+            return;
+        }
+        Bid leadingBid = bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(auction.getId())
+            .orElse(null);
 
         boolean reserveMet = leadingBid != null && leadingBid.getAmount().compareTo(auction.getReservePrice()) >= 0;
         if (reserveMet) {

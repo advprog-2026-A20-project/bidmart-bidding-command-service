@@ -29,19 +29,19 @@ public class WalletClient {
     }
 
     public void holdFunds(UUID userId, UUID auctionId, BigDecimal amount) {
-        post("/internal/wallet/hold", userId, auctionId, amount);
+        post("/wallet/internal/hold", userId, auctionId, amount);
     }
 
     public void releaseFunds(UUID userId, UUID auctionId, BigDecimal amount) {
-        post("/internal/wallet/release", userId, auctionId, amount);
+        post("/wallet/internal/release", userId, auctionId, amount);
     }
 
     public void captureFunds(UUID userId, UUID auctionId, BigDecimal amount) {
-        post("/internal/wallet/capture", userId, auctionId, amount);
+        post("/wallet/internal/capture", userId, auctionId, amount);
     }
 
     public void creditFunds(UUID userId, UUID auctionId, BigDecimal amount) {
-        post("/internal/wallet/credit", userId, auctionId, amount);
+        post("/wallet/internal/credit", userId, auctionId, amount);
     }
 
     private void post(String path, UUID userId, UUID auctionId, BigDecimal amount) {
