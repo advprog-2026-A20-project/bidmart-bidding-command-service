@@ -22,6 +22,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 class WalletClientTest {
 
+    private static final String HOLD_ENDPOINT = "/wallet/internal/hold";
+
     private RestTemplate restTemplate;
     private MockRestServiceServer server;
     private WalletClient walletClient;
@@ -40,8 +42,8 @@ class WalletClientTest {
     }
 
     @Test
-    void holdFunds_shouldPostToWalletHoldEndpoint() {
-        expectWalletPost("/wallet/internal/hold");
+    void holdFundsShouldPostToWalletHoldEndpoint() {
+        expectWalletPost(HOLD_ENDPOINT);
 
         walletClient.holdFunds(userId, auctionId, amount);
 
@@ -49,7 +51,7 @@ class WalletClientTest {
     }
 
     @Test
-    void releaseFunds_shouldPostToWalletReleaseEndpoint() {
+    void releaseFundsShouldPostToWalletReleaseEndpoint() {
         expectWalletPost("/wallet/internal/release");
 
         walletClient.releaseFunds(userId, auctionId, amount);
@@ -58,7 +60,7 @@ class WalletClientTest {
     }
 
     @Test
-    void captureFunds_shouldPostToWalletCaptureEndpoint() {
+    void captureFundsShouldPostToWalletCaptureEndpoint() {
         expectWalletPost("/wallet/internal/capture");
 
         walletClient.captureFunds(userId, auctionId, amount);
@@ -67,7 +69,7 @@ class WalletClientTest {
     }
 
     @Test
-    void creditFunds_shouldPostToWalletCreditEndpoint() {
+    void creditFundsShouldPostToWalletCreditEndpoint() {
         expectWalletPost("/wallet/internal/credit");
 
         walletClient.creditFunds(userId, auctionId, amount);
@@ -76,8 +78,8 @@ class WalletClientTest {
     }
 
     @Test
-    void walletUnauthorized_shouldThrowSafeExceptionWithoutLeakingRawBody() {
-        server.expect(requestTo(baseUrl + "/wallet/internal/hold"))
+    void walletUnauthorizedShouldThrowSafeExceptionWithoutLeakingRawBody() {
+        server.expect(requestTo(baseUrl + HOLD_ENDPOINT))
             .andRespond(withStatus(HttpStatus.UNAUTHORIZED).body("secret internal error"));
 
         ResponseStatusException ex = assertThrows(
@@ -90,8 +92,8 @@ class WalletClientTest {
     }
 
     @Test
-    void walletServerError_shouldThrowSafeExceptionWithoutLeakingRawBody() {
-        server.expect(requestTo(baseUrl + "/wallet/internal/hold"))
+    void walletServerErrorShouldThrowSafeExceptionWithoutLeakingRawBody() {
+        server.expect(requestTo(baseUrl + HOLD_ENDPOINT))
             .andRespond(withServerError().body("database exploded"));
 
         ResponseStatusException ex = assertThrows(
@@ -117,7 +119,7 @@ class WalletClientTest {
     void shouldNotSendInternalTokenHeaderWhenInternalTokenBlank() {
         walletClient = new WalletClient(restTemplate, baseUrl, "");
 
-        server.expect(requestTo(baseUrl + "/wallet/internal/hold"))
+        server.expect(requestTo(baseUrl + HOLD_ENDPOINT))
             .andExpect(method(HttpMethod.POST))
             .andRespond(withSuccess());
 

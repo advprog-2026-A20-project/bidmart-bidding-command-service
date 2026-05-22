@@ -43,6 +43,8 @@ import org.springframework.test.web.servlet.MockMvc;
 class SecurityBehaviorTest {
 
     private static final String JWT_SECRET = "test-secret-please-change-32-chars";
+    private static final String AUCTIONS_ENDPOINT = "/api/auctions";
+    private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final UUID AUCTION_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     @Autowired
@@ -64,14 +66,14 @@ class SecurityBehaviorTest {
     }
 
     @Test
-    void publicEndpoint_health_shouldBeAccessibleWithoutToken() throws Exception {
+    void publicEndpointHealthShouldBeAccessibleWithoutToken() throws Exception {
         mockMvc.perform(get("/actuator/health"))
             .andExpect(status().isOk());
     }
 
     @Test
-    void protectedEndpoint_withoutToken_shouldReturn401() throws Exception {
-        mockMvc.perform(post("/api/auctions")
+    void protectedEndpointWithoutTokenShouldReturn401() throws Exception {
+        mockMvc.perform(post(AUCTIONS_ENDPOINT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validAuctionCreateRequest()))
             .andExpect(status().isUnauthorized())
@@ -79,53 +81,53 @@ class SecurityBehaviorTest {
     }
 
     @Test
-    void createAuction_withSellerToken_shouldPassSecurityLayer() throws Exception {
+    void createAuctionWithSellerTokenShouldPassSecurityLayer() throws Exception {
         String token = jwtService.generateToken(user(Role.SELLER));
 
-        mockMvc.perform(post("/api/auctions")
-                .header("Authorization", "Bearer " + token)
+        mockMvc.perform(post(AUCTIONS_ENDPOINT)
+                .header(AUTHORIZATION_HEADER, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validAuctionCreateRequest()))
             .andExpect(status().isCreated());
     }
 
     @Test
-    void createAuction_withBuyerToken_shouldReturn403() throws Exception {
+    void createAuctionWithBuyerTokenShouldReturn403() throws Exception {
         String token = jwtService.generateToken(user(Role.BUYER));
 
-        mockMvc.perform(post("/api/auctions")
-                .header("Authorization", "Bearer " + token)
+        mockMvc.perform(post(AUCTIONS_ENDPOINT)
+                .header(AUTHORIZATION_HEADER, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validAuctionCreateRequest()))
             .andExpect(status().isForbidden());
     }
 
     @Test
-    void placeBid_withBuyerToken_shouldPassSecurityLayer() throws Exception {
+    void placeBidWithBuyerTokenShouldPassSecurityLayer() throws Exception {
         String token = jwtService.generateToken(user(Role.BUYER));
 
         mockMvc.perform(post("/api/auctions/{auctionId}/bids", AUCTION_ID)
-                .header("Authorization", "Bearer " + token)
+                .header(AUTHORIZATION_HEADER, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amount\":1500.00}"))
             .andExpect(status().isCreated());
     }
 
     @Test
-    void placeBid_withSellerToken_shouldReturn403() throws Exception {
+    void placeBidWithSellerTokenShouldReturn403() throws Exception {
         String token = jwtService.generateToken(user(Role.SELLER));
 
         mockMvc.perform(post("/api/auctions/{auctionId}/bids", AUCTION_ID)
-                .header("Authorization", "Bearer " + token)
+                .header(AUTHORIZATION_HEADER, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amount\":1500.00}"))
             .andExpect(status().isForbidden());
     }
 
     @Test
-    void malformedToken_shouldReturn401Not500() throws Exception {
-        mockMvc.perform(post("/api/auctions")
-                .header("Authorization", "Bearer malformed.token.value")
+    void malformedTokenShouldReturn401Not500() throws Exception {
+        mockMvc.perform(post(AUCTIONS_ENDPOINT)
+                .header(AUTHORIZATION_HEADER, "Bearer malformed.token.value")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validAuctionCreateRequest()))
             .andExpect(status().isUnauthorized())
@@ -133,7 +135,7 @@ class SecurityBehaviorTest {
     }
 
     @Test
-    void tokenWithInvalidRoleClaim_shouldReturn401Not500() throws Exception {
+    void tokenWithInvalidRoleClaimShouldReturn401Not500() throws Exception {
         String token = Jwts.builder()
             .setSubject(UUID.fromString("33333333-3333-3333-3333-333333333333").toString())
             .setIssuedAt(Date.from(Instant.now()))
@@ -146,8 +148,8 @@ class SecurityBehaviorTest {
             )
             .compact();
 
-        mockMvc.perform(post("/api/auctions")
-                .header("Authorization", "Bearer " + token)
+        mockMvc.perform(post(AUCTIONS_ENDPOINT)
+                .header(AUTHORIZATION_HEADER, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validAuctionCreateRequest()))
             .andExpect(status().isUnauthorized())

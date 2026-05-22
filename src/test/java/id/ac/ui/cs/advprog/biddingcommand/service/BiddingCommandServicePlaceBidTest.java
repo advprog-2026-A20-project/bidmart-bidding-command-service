@@ -44,6 +44,8 @@ import org.springframework.web.server.ResponseStatusException;
 class BiddingCommandServicePlaceBidTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T10:15:30Z");
+    private static final BigDecimal BID_1200 = new BigDecimal("1200.00");
+    private static final BigDecimal BID_1400 = new BigDecimal("1400.00");
     private static final UUID AUCTION_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final UUID LISTING_ID = UUID.fromString("44444444-4444-4444-4444-444444444444");
     private static final UUID SELLER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -86,7 +88,7 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_shouldHoldFundsPersistBidUpdateListingAndPublishEvent() {
+    void placeBidShouldHoldFundsPersistBidUpdateListingAndPublishEvent() {
         User buyer = buyer(BUYER_ID);
         Auction auction = activeAuction(seller(), ListingStatus.ACTIVE, AuctionStatus.ACTIVE, NOW.plusSeconds(600));
         AtomicReference<Bid> savedBidRef = new AtomicReference<>();
@@ -103,10 +105,10 @@ class BiddingCommandServicePlaceBidTest {
         when(bidRepository.findByAuctionIdOrderBySequenceNumberAsc(AUCTION_ID))
             .thenAnswer(invocation -> savedBidRef.get() == null ? List.of() : List.of(savedBidRef.get()));
 
-        biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID);
+        biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID);
 
         InOrder inOrder = inOrder(walletClient, bidRepository, auctionRepository, eventPublisher);
-        inOrder.verify(walletClient).holdFunds(BUYER_ID, AUCTION_ID, new BigDecimal("1200.00"));
+        inOrder.verify(walletClient).holdFunds(BUYER_ID, AUCTION_ID, BID_1200);
         inOrder.verify(bidRepository).save(any(Bid.class));
         inOrder.verify(auctionRepository).save(auction);
         inOrder.verify(eventPublisher).publishEvent(any(Object.class));
@@ -114,16 +116,16 @@ class BiddingCommandServicePlaceBidTest {
         ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
         verify(bidRepository).save(bidCaptor.capture());
         Bid savedBid = bidCaptor.getValue();
-        assertEquals(new BigDecimal("1200.00"), savedBid.getAmount());
+        assertEquals(BID_1200, savedBid.getAmount());
         assertEquals(1L, savedBid.getSequenceNumber());
         assertEquals(NOW, savedBid.getSubmittedAt());
-        assertEquals(new BigDecimal("1200.00"), auction.getListing().getPrice());
+        assertEquals(BID_1200, auction.getListing().getPrice());
         assertEquals(NOW, auction.getListing().getUpdatedAt());
         assertEquals(2L, auction.getNextBidSequence());
     }
 
     @Test
-    void placeBid_whenRequestIsNull_shouldThrowBadRequest() {
+    void placeBidWhenRequestIsNullShouldThrowBadRequest() {
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
             () -> biddingCommandService.placeBid(AUCTION_ID, null, BUYER_ID)
@@ -134,7 +136,7 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenAmountIsNull_shouldThrowBadRequest() {
+    void placeBidWhenAmountIsNullShouldThrowBadRequest() {
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
             () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(null), BUYER_ID)
@@ -145,7 +147,7 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenAmountIsZeroOrNegative_shouldThrowBadRequest() {
+    void placeBidWhenAmountIsZeroOrNegativeShouldThrowBadRequest() {
         ResponseStatusException zeroException = assertThrows(
             ResponseStatusException.class,
             () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BigDecimal.ZERO), BUYER_ID)
@@ -162,12 +164,12 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenBuyerNotFound_shouldThrowUnauthorized() {
+    void placeBidWhenBuyerNotFoundShouldThrowUnauthorized() {
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.empty());
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
-            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID)
+            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID)
         );
 
         assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatusCode());
@@ -175,12 +177,12 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenUserIsNotBuyer_shouldThrowForbidden() {
+    void placeBidWhenUserIsNotBuyerShouldThrowForbidden() {
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(seller()));
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
-            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID)
+            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID)
         );
 
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
@@ -188,13 +190,13 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenAuctionNotFound_shouldThrowNotFound() {
+    void placeBidWhenAuctionNotFoundShouldThrowNotFound() {
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(buyer(BUYER_ID)));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.empty());
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
-            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID)
+            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID)
         );
 
         assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
@@ -202,28 +204,28 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenListingNotBiddable_shouldThrowConflict() {
+    void placeBidWhenListingNotBiddableShouldThrowConflict() {
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(buyer(BUYER_ID)));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID))
             .thenReturn(Optional.of(activeAuction(seller(), ListingStatus.DRAFT, AuctionStatus.ACTIVE, NOW.plusSeconds(600))));
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
-            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID)
+            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID)
         );
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
     }
 
     @Test
-    void placeBid_whenAuctionNotBiddable_shouldThrowConflict() {
+    void placeBidWhenAuctionNotBiddableShouldThrowConflict() {
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(buyer(BUYER_ID)));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID))
             .thenReturn(Optional.of(activeAuction(seller(), ListingStatus.ACTIVE, AuctionStatus.DRAFT, NOW.plusSeconds(600))));
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
-            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID)
+            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID)
         );
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
@@ -231,14 +233,14 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenAuctionHasNoEndTime_shouldThrowConflict() {
+    void placeBidWhenAuctionHasNoEndTimeShouldThrowConflict() {
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(buyer(BUYER_ID)));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID))
             .thenReturn(Optional.of(activeAuction(seller(), ListingStatus.ACTIVE, AuctionStatus.ACTIVE, null)));
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
-            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID)
+            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID)
         );
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
@@ -246,14 +248,14 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenSellerBidsOwnAuction_shouldThrowForbidden() {
+    void placeBidWhenSellerBidsOwnAuctionShouldThrowForbidden() {
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(buyer(SELLER_ID)));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID))
             .thenReturn(Optional.of(activeAuction(sellerWithId(SELLER_ID), ListingStatus.ACTIVE, AuctionStatus.ACTIVE, NOW.plusSeconds(600))));
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
-            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), SELLER_ID)
+            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), SELLER_ID)
         );
 
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
@@ -261,12 +263,12 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenAmountBelowMinimum_shouldThrowConflict() {
+    void placeBidWhenAmountBelowMinimumShouldThrowConflict() {
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(buyer(BUYER_ID)));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID))
             .thenReturn(Optional.of(activeAuction(seller(), ListingStatus.ACTIVE, AuctionStatus.ACTIVE, NOW.plusSeconds(600))));
         when(bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(AUCTION_ID))
-            .thenReturn(Optional.of(previousLeader(otherBuyer(), new BigDecimal("1200.00"), 1L)));
+            .thenReturn(Optional.of(previousLeader(otherBuyer(), BID_1200, 1L)));
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
@@ -278,10 +280,10 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenPreviousLeaderExists_shouldReleasePreviousLeaderFunds() {
+    void placeBidWhenPreviousLeaderExistsShouldReleasePreviousLeaderFunds() {
         User buyer = buyer(BUYER_ID);
         Auction auction = activeAuction(seller(), ListingStatus.ACTIVE, AuctionStatus.ACTIVE, NOW.plusSeconds(600));
-        Bid previousLeader = previousLeader(otherBuyer(), new BigDecimal("1200.00"), 1L);
+        Bid previousLeader = previousLeader(otherBuyer(), BID_1200, 1L);
         AtomicReference<Bid> savedBidRef = new AtomicReference<>();
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(buyer));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
@@ -296,17 +298,17 @@ class BiddingCommandServicePlaceBidTest {
         when(bidRepository.findByAuctionIdOrderBySequenceNumberAsc(AUCTION_ID))
             .thenAnswer(invocation -> savedBidRef.get() == null ? List.of(previousLeader) : List.of(previousLeader, savedBidRef.get()));
 
-        biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1400.00")), BUYER_ID);
+        biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1400), BUYER_ID);
 
-        verify(walletClient).holdFunds(BUYER_ID, AUCTION_ID, new BigDecimal("1400.00"));
-        verify(walletClient).releaseFunds(OTHER_BUYER_ID, AUCTION_ID, new BigDecimal("1200.00"));
+        verify(walletClient).holdFunds(BUYER_ID, AUCTION_ID, BID_1400);
+        verify(walletClient).releaseFunds(OTHER_BUYER_ID, AUCTION_ID, BID_1200);
     }
 
     @Test
-    void placeBid_whenSameBidderIsPreviousLeader_shouldOnlyHoldDifference() {
+    void placeBidWhenSameBidderIsPreviousLeaderShouldOnlyHoldDifference() {
         User buyer = buyer(BUYER_ID);
         Auction auction = activeAuction(seller(), ListingStatus.ACTIVE, AuctionStatus.ACTIVE, NOW.plusSeconds(600));
-        Bid previousLeader = previousLeader(buyer, new BigDecimal("1200.00"), 1L);
+        Bid previousLeader = previousLeader(buyer, BID_1200, 1L);
         AtomicReference<Bid> savedBidRef = new AtomicReference<>();
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(buyer));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
@@ -321,14 +323,14 @@ class BiddingCommandServicePlaceBidTest {
         when(bidRepository.findByAuctionIdOrderBySequenceNumberAsc(AUCTION_ID))
             .thenAnswer(invocation -> savedBidRef.get() == null ? List.of(previousLeader) : List.of(previousLeader, savedBidRef.get()));
 
-        biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1400.00")), BUYER_ID);
+        biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1400), BUYER_ID);
 
         verify(walletClient).holdFunds(BUYER_ID, AUCTION_ID, new BigDecimal("200.00"));
-        verify(walletClient, never()).releaseFunds(BUYER_ID, AUCTION_ID, new BigDecimal("1200.00"));
+        verify(walletClient, never()).releaseFunds(BUYER_ID, AUCTION_ID, BID_1200);
     }
 
     @Test
-    void placeBid_nearAuctionEnd_shouldExtendAuctionAndSetStatusExtended() {
+    void placeBidNearAuctionEndShouldExtendAuctionAndSetStatusExtended() {
         User buyer = buyer(BUYER_ID);
         Auction auction = activeAuction(seller(), ListingStatus.ACTIVE, AuctionStatus.ACTIVE, NOW.plusSeconds(30));
         AtomicReference<Bid> savedBidRef = new AtomicReference<>();
@@ -345,7 +347,7 @@ class BiddingCommandServicePlaceBidTest {
         when(bidRepository.findByAuctionIdOrderBySequenceNumberAsc(AUCTION_ID))
             .thenAnswer(invocation -> savedBidRef.get() == null ? List.of() : List.of(savedBidRef.get()));
 
-        biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID);
+        biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID);
 
         assertEquals(AuctionStatus.EXTENDED, auction.getStatus());
         assertEquals(NOW.plusSeconds(120), auction.getEndsAt());
@@ -354,14 +356,14 @@ class BiddingCommandServicePlaceBidTest {
     }
 
     @Test
-    void placeBid_whenAuctionExpired_shouldCloseAuctionBeforeRejectingOrProcessingAccordingToExistingBehavior() {
+    void placeBidWhenAuctionExpiredShouldCloseAuctionBeforeRejectingOrProcessingAccordingToExistingBehavior() {
         when(userRepository.findById(BUYER_ID)).thenReturn(Optional.of(buyer(BUYER_ID)));
         Auction auction = activeAuction(seller(), ListingStatus.ACTIVE, AuctionStatus.ACTIVE, NOW.minusSeconds(1));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
 
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
-            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(new BigDecimal("1200.00")), BUYER_ID)
+            () -> biddingCommandService.placeBid(AUCTION_ID, new BidPlaceRequest(BID_1200), BUYER_ID)
         );
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());

@@ -38,6 +38,7 @@ import org.springframework.web.server.ResponseStatusException;
 class ListingServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
+    private static final BigDecimal DISPLAYED_PRICE = new BigDecimal("1234.50");
 
     @Mock
     private ListingRepository listingRepository;
@@ -57,7 +58,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void createAuctionListing_shouldTrimTitleAndDescription() {
+    void createAuctionListingShouldTrimTitleAndDescription() {
         AuctionCreateRequest request = requestWith("  Camera  ", "  Good condition  ", ListingCategory.ELECTRONICS, "https://img");
         User seller = seller();
         when(listingRepository.save(any(Listing.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -69,7 +70,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void createAuctionListing_shouldDefaultCategoryToOtherWhenNull() {
+    void createAuctionListingShouldDefaultCategoryToOtherWhenNull() {
         AuctionCreateRequest request = requestWith("Camera", "Good condition", null, "https://img");
         when(listingRepository.save(any(Listing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -79,7 +80,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void createAuctionListing_shouldNormalizeBlankImageUrlToNull() {
+    void createAuctionListingShouldNormalizeBlankImageUrlToNull() {
         AuctionCreateRequest request = requestWith("Camera", "Good condition", ListingCategory.ELECTRONICS, "   ");
         when(listingRepository.save(any(Listing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -89,7 +90,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void validateListingForBid_shouldThrowNotFoundWhenListingMissing() {
+    void validateListingForBidShouldThrowNotFoundWhenListingMissing() {
         UUID listingId = UUID.randomUUID();
         when(listingRepository.findById(listingId)).thenReturn(Optional.empty());
 
@@ -103,7 +104,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void validateListingForBid_shouldReturnNotBiddableWhenListingInactive() {
+    void validateListingForBidShouldReturnNotBiddableWhenListingInactive() {
         UUID listingId = UUID.randomUUID();
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(listing(listingId, ListingStatus.DRAFT)));
 
@@ -111,7 +112,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void validateListingForBid_shouldReturnNotBiddableWhenAuctionMissing() {
+    void validateListingForBidShouldReturnNotBiddableWhenAuctionMissing() {
         UUID listingId = UUID.randomUUID();
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(listing(listingId, ListingStatus.ACTIVE)));
         when(auctionRepository.findByListingId(listingId)).thenReturn(Optional.empty());
@@ -120,7 +121,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void validateListingForBid_shouldReturnBiddableWhenAuctionActive() {
+    void validateListingForBidShouldReturnBiddableWhenAuctionActive() {
         UUID listingId = UUID.randomUUID();
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(listing(listingId, ListingStatus.ACTIVE)));
         when(auctionRepository.findByListingId(listingId)).thenReturn(Optional.of(auction(AuctionStatus.ACTIVE)));
@@ -129,7 +130,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void validateListingForBid_shouldReturnBiddableWhenAuctionExtended() {
+    void validateListingForBidShouldReturnBiddableWhenAuctionExtended() {
         UUID listingId = UUID.randomUUID();
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(listing(listingId, ListingStatus.EXTENDED)));
         when(auctionRepository.findByListingId(listingId)).thenReturn(Optional.of(auction(AuctionStatus.EXTENDED)));
@@ -138,7 +139,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void validateListingForBid_shouldReturnNotBiddableWhenAuctionDraft() {
+    void validateListingForBidShouldReturnNotBiddableWhenAuctionDraft() {
         UUID listingId = UUID.randomUUID();
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(listing(listingId, ListingStatus.ACTIVE)));
         when(auctionRepository.findByListingId(listingId)).thenReturn(Optional.of(auction(AuctionStatus.DRAFT)));
@@ -147,7 +148,7 @@ class ListingServiceTest {
     }
 
     @Test
-    void validateListingForBid_shouldReturnNotBiddableWhenAuctionClosedWonOrUnsold() {
+    void validateListingForBidShouldReturnNotBiddableWhenAuctionClosedWonOrUnsold() {
         UUID listingId = UUID.randomUUID();
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(listing(listingId, ListingStatus.ACTIVE)));
         when(auctionRepository.findByListingId(listingId))
@@ -161,24 +162,24 @@ class ListingServiceTest {
     }
 
     @Test
-    void updateDisplayedPrice_shouldUpdatePriceAndTimestampWhenListingExists() {
+    void updateDisplayedPriceShouldUpdatePriceAndTimestampWhenListingExists() {
         UUID listingId = UUID.randomUUID();
         Listing listing = listing(listingId, ListingStatus.ACTIVE);
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(listing));
 
-        listingService.updateDisplayedPrice(listingId, new BigDecimal("1234.50"));
+        listingService.updateDisplayedPrice(listingId, DISPLAYED_PRICE);
 
-        assertEquals(new BigDecimal("1234.50"), listing.getPrice());
+        assertEquals(DISPLAYED_PRICE, listing.getPrice());
         assertEquals(NOW, listing.getUpdatedAt());
         verify(listingRepository).save(listing);
     }
 
     @Test
-    void updateDisplayedPrice_shouldDoNothingWhenListingNotFound() {
+    void updateDisplayedPriceShouldDoNothingWhenListingNotFound() {
         UUID listingId = UUID.randomUUID();
         when(listingRepository.findById(listingId)).thenReturn(Optional.empty());
 
-        listingService.updateDisplayedPrice(listingId, new BigDecimal("1234.50"));
+        listingService.updateDisplayedPrice(listingId, DISPLAYED_PRICE);
 
         verify(listingRepository, never()).save(any(Listing.class));
     }

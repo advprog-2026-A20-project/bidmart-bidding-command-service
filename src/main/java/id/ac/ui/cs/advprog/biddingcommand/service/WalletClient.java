@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
@@ -51,46 +50,38 @@ public class WalletClient {
         post("/wallet/internal/credit", userId, auctionId, amount);
     }
 
-private void post(String path, UUID userId, UUID auctionId, BigDecimal amount) {
-    HttpHeaders headers = new HttpHeaders();
-    if (internalToken != null && !internalToken.isBlank()) {
-        headers.set("X-Internal-Token", internalToken);
+    private void post(String path, UUID userId, UUID auctionId, BigDecimal amount) {
+        HttpHeaders headers = new HttpHeaders();
+        if (internalToken != null && !internalToken.isBlank()) {
+            headers.set("X-Internal-Token", internalToken);
+        }
+
+        WalletCommandRequest request = new WalletCommandRequest(userId, auctionId, amount);
+
+        try {
+            restTemplate.postForEntity(
+                walletBaseUrl + path,
+                new HttpEntity<>(request, headers),
+                Void.class
+            );
+        } catch (HttpStatusCodeException ex) {
+            throw new ResponseStatusException(
+                ex.getStatusCode(),
+                safeWalletErrorMessage(ex)
+            );
+        } catch (ResourceAccessException ex) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                "Wallet service unavailable"
+            );
+        }
     }
 
-    WalletCommandRequest request = new WalletCommandRequest(userId, auctionId, amount);
-
-    try {
-        restTemplate.postForEntity(
-            walletBaseUrl + path,
-            new HttpEntity<>(request, headers),
-            Void.class
-        );
-    } catch (HttpStatusCodeException ex) {
-        throw new ResponseStatusException(
-            ex.getStatusCode(),
-            safeWalletErrorMessage(ex)
-        );
-    } catch (ResourceAccessException ex) {
-        throw new ResponseStatusException(
-            HttpStatus.BAD_GATEWAY,
-            "Wallet service unavailable"
-        );
-    }
-}
-
-private String safeWalletErrorMessage(HttpStatusCodeException ex) {
-    if (ex.getStatusCode().is4xxClientError()) {
-        return "Wallet service rejected the request";
-    }
-    return "Wallet service error";
-}
-
-    private ResponseStatusException mapWalletError(HttpStatusCode statusCode) {
-        HttpStatus status = HttpStatus.valueOf(statusCode.value());
-        String message = status.is4xxClientError()
-            ? "Wallet service rejected the request"
-            : "Wallet service error";
-        return new ResponseStatusException(status, message);
+    private String safeWalletErrorMessage(HttpStatusCodeException ex) {
+        if (ex.getStatusCode().is4xxClientError()) {
+            return "Wallet service rejected the request";
+        }
+        return "Wallet service error";
     }
 
     private String trimTrailingSlash(String value) {

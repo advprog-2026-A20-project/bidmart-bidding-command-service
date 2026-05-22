@@ -47,16 +47,19 @@ import org.springframework.web.server.ResponseStatusException;
 })
 class GlobalExceptionHandlerTest {
 
+    private static final String TIMESTAMP_PATH = "$.timestamp";
+    private static final String UNEXPECTED_ENDPOINT = "/test/unexpected";
+
     @Autowired
     private MockMvc mockMvc;
 
     @Test
-    void validationError_shouldReturn400WithFieldErrors() throws Exception {
+    void validationErrorShouldReturn400WithFieldErrors() throws Exception {
         mockMvc.perform(post("/test/validate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.timestamp").exists())
+            .andExpect(jsonPath(TIMESTAMP_PATH).exists())
             .andExpect(jsonPath("$.status").value(400))
             .andExpect(jsonPath("$.error").value("Bad Request"))
             .andExpect(jsonPath("$.message").value("Request validation failed"))
@@ -66,12 +69,12 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void malformedJson_shouldReturn400WithSafeMessage() throws Exception {
+    void malformedJsonShouldReturn400WithSafeMessage() throws Exception {
         mockMvc.perform(post("/test/validate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"item\","))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.timestamp").exists())
+            .andExpect(jsonPath(TIMESTAMP_PATH).exists())
             .andExpect(jsonPath("$.status").value(400))
             .andExpect(jsonPath("$.error").value("Bad Request"))
             .andExpect(jsonPath("$.message").value("Malformed request body"))
@@ -81,10 +84,10 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void accessDenied_shouldReturn403() throws Exception {
+    void accessDeniedShouldReturn403() throws Exception {
         mockMvc.perform(get("/test/access-denied"))
             .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.timestamp").exists())
+            .andExpect(jsonPath(TIMESTAMP_PATH).exists())
             .andExpect(jsonPath("$.status").value(403))
             .andExpect(jsonPath("$.error").value("Forbidden"))
             .andExpect(jsonPath("$.message").value("Access denied"))
@@ -93,10 +96,10 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void responseStatusException_shouldPreserveHttpStatus() throws Exception {
+    void responseStatusExceptionShouldPreserveHttpStatus() throws Exception {
         mockMvc.perform(get("/test/not-found"))
             .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.timestamp").exists())
+            .andExpect(jsonPath(TIMESTAMP_PATH).exists())
             .andExpect(jsonPath("$.status").value(404))
             .andExpect(jsonPath("$.error").value("Not Found"))
             .andExpect(jsonPath("$.message").value("Missing resource"))
@@ -105,20 +108,20 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void unexpectedException_shouldReturn500WithGenericMessage() throws Exception {
-        mockMvc.perform(get("/test/unexpected"))
+    void unexpectedExceptionShouldReturn500WithGenericMessage() throws Exception {
+        mockMvc.perform(get(UNEXPECTED_ENDPOINT))
             .andExpect(status().isInternalServerError())
-            .andExpect(jsonPath("$.timestamp").exists())
+            .andExpect(jsonPath(TIMESTAMP_PATH).exists())
             .andExpect(jsonPath("$.status").value(500))
             .andExpect(jsonPath("$.error").value("Internal Server Error"))
             .andExpect(jsonPath("$.message").value("Internal server error"))
-            .andExpect(jsonPath("$.path").value("/test/unexpected"))
+            .andExpect(jsonPath("$.path").value(UNEXPECTED_ENDPOINT))
             .andExpect(jsonPath("$.fieldErrors").isEmpty());
     }
 
     @Test
-    void unexpectedException_shouldNotExposeStackTraceOrInternalExceptionMessage() throws Exception {
-        mockMvc.perform(get("/test/unexpected"))
+    void unexpectedExceptionShouldNotExposeStackTraceOrInternalExceptionMessage() throws Exception {
+        mockMvc.perform(get(UNEXPECTED_ENDPOINT))
             .andExpect(status().isInternalServerError())
             .andExpect(jsonPath("$.message", not(containsString("Database connection failed"))))
             .andExpect(jsonPath("$.message", not(containsString("java.lang.RuntimeException"))))

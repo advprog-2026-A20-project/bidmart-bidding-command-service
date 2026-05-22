@@ -81,7 +81,7 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void createAuction_shouldCreateDraftAuction() {
+    void createAuctionShouldCreateDraftAuction() {
         AuctionCreateRequest request = validRequest(false).build();
         User seller = seller(SELLER_ID);
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller));
@@ -112,7 +112,7 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void createAuction_activateNow_shouldActivateAndPublishEvent() {
+    void createAuctionActivateNowShouldActivateAndPublishEvent() {
         AuctionCreateRequest request = validRequest(true).build();
         User seller = seller(SELLER_ID);
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller));
@@ -143,7 +143,7 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void createAuction_withNullRequest_shouldThrowBadRequest() {
+    void createAuctionWithNullRequestShouldThrowBadRequest() {
         ResponseStatusException exception = assertThrows(
             ResponseStatusException.class,
             () -> biddingCommandService.createAuction(null, SELLER_ID)
@@ -154,27 +154,27 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void createAuction_withBlankTitle_shouldThrowBadRequest() {
+    void createAuctionWithBlankTitleShouldThrowBadRequest() {
         assertBadRequest(validRequest(false).withTitle("   "), "Title is required");
     }
 
     @Test
-    void createAuction_withBlankDescription_shouldThrowBadRequest() {
+    void createAuctionWithBlankDescriptionShouldThrowBadRequest() {
         assertBadRequest(validRequest(false).withDescription("   "), "Description is required");
     }
 
     @Test
-    void createAuction_withInvalidStartingPrice_shouldThrowBadRequest() {
+    void createAuctionWithInvalidStartingPriceShouldThrowBadRequest() {
         assertBadRequest(validRequest(false).withStartingPrice(BigDecimal.ZERO), "Starting price must be positive");
     }
 
     @Test
-    void createAuction_withInvalidReservePrice_shouldThrowBadRequest() {
+    void createAuctionWithInvalidReservePriceShouldThrowBadRequest() {
         assertBadRequest(validRequest(false).withReservePrice(BigDecimal.ZERO), "Reserve price must be positive");
     }
 
     @Test
-    void createAuction_withReservePriceLowerThanStartingPrice_shouldThrowBadRequest() {
+    void createAuctionWithReservePriceLowerThanStartingPriceShouldThrowBadRequest() {
         assertBadRequest(
             validRequest(false).withStartingPrice(new BigDecimal("1000.00")).withReservePrice(new BigDecimal("999.99")),
             "Reserve price must be greater than or equal to starting price"
@@ -182,7 +182,7 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void createAuction_withInvalidMinimumIncrement_shouldThrowBadRequest() {
+    void createAuctionWithInvalidMinimumIncrementShouldThrowBadRequest() {
         assertBadRequest(
             validRequest(false).withMinimumBidIncrement(BigDecimal.ZERO),
             "Minimum bid increment must be positive"
@@ -190,12 +190,12 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void createAuction_withInvalidDuration_shouldThrowBadRequest() {
+    void createAuctionWithInvalidDurationShouldThrowBadRequest() {
         assertBadRequest(validRequest(false).withDurationMinutes(0L), "Duration must be between 1 and 20160 minutes");
     }
 
     @Test
-    void activateAuction_byOwner_shouldActivateAuction() {
+    void activateAuctionByOwnerShouldActivateAuction() {
         Auction draftAuction = draftAuction(seller(SELLER_ID));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(draftAuction));
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller(SELLER_ID)));
@@ -214,7 +214,7 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void activateAuction_byNonOwner_shouldThrowForbidden() {
+    void activateAuctionByNonOwnerShouldThrowForbidden() {
         Auction draftAuction = draftAuction(seller(SELLER_ID));
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(draftAuction));
         when(userRepository.findById(OTHER_SELLER_ID)).thenReturn(Optional.of(seller(OTHER_SELLER_ID)));
@@ -229,7 +229,7 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void activateAuction_whenAuctionNotFound_shouldThrowNotFound() {
+    void activateAuctionWhenAuctionNotFoundShouldThrowNotFound() {
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.empty());
 
         ResponseStatusException exception = assertThrows(
@@ -242,7 +242,7 @@ class BiddingCommandServiceCreateActivateTest {
     }
 
     @Test
-    void activateAuction_whenNotDraft_shouldThrowConflict() {
+    void activateAuctionWhenNotDraftShouldThrowConflict() {
         Auction activeAuction = draftAuction(seller(SELLER_ID));
         activeAuction.setStatus(AuctionStatus.ACTIVE);
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(activeAuction));

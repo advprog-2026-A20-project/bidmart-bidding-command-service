@@ -24,7 +24,7 @@ class JwtServiceTest {
     private static final String OTHER_SECRET = "abcdefghijklmnopqrstuvwxyz123456";
 
     @Test
-    void generateToken_shouldCreateTokenWithUserIdEmailAndRole() {
+    void generateTokenShouldCreateTokenWithUserIdEmailAndRole() {
         JwtService jwtService = new JwtService(VALID_SECRET, 3600);
         User user = createUser();
 
@@ -37,7 +37,7 @@ class JwtServiceTest {
     }
 
     @Test
-    void isValid_shouldReturnTrueForValidToken() {
+    void isValidShouldReturnTrueForValidToken() {
         JwtService jwtService = new JwtService(VALID_SECRET, 3600);
 
         String token = jwtService.generateToken(createUser());
@@ -46,14 +46,14 @@ class JwtServiceTest {
     }
 
     @Test
-    void isValid_shouldReturnFalseForMalformedToken() {
+    void isValidShouldReturnFalseForMalformedToken() {
         JwtService jwtService = new JwtService(VALID_SECRET, 3600);
 
         assertFalse(jwtService.isValid("not-a-jwt"));
     }
 
     @Test
-    void isValid_shouldReturnFalseForTokenWithInvalidSignature() {
+    void isValidShouldReturnFalseForTokenWithInvalidSignature() {
         JwtService signingService = new JwtService(OTHER_SECRET, 3600);
         JwtService validatingService = new JwtService(VALID_SECRET, 3600);
 
@@ -63,7 +63,7 @@ class JwtServiceTest {
     }
 
     @Test
-    void isValid_shouldReturnFalseForExpiredToken() {
+    void isValidShouldReturnFalseForExpiredToken() {
         JwtService jwtService = new JwtService(VALID_SECRET, -1);
 
         String token = jwtService.generateToken(createUser());
@@ -72,7 +72,7 @@ class JwtServiceTest {
     }
 
     @Test
-    void constructor_shouldRejectSecretShorterThan32Characters() {
+    void constructorShouldRejectSecretShorterThan32Characters() {
         IllegalArgumentException exception = assertThrows(
             IllegalArgumentException.class,
             () -> new JwtService("short-secret", 3600)
@@ -83,7 +83,7 @@ class JwtServiceTest {
     }
 
     @Test
-    void extractMethods_shouldReturnExpectedClaimsForValidToken() {
+    void extractMethodsShouldReturnExpectedClaimsForValidToken() {
         JwtService jwtService = new JwtService(VALID_SECRET, 3600);
         User user = createUser();
         String token = Jwts.builder()
