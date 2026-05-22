@@ -24,8 +24,21 @@ jobs:
           fi
           echo "HEROKU_API_KEY detected"
 
+      - name: Setup Node
+        uses: actions/setup-node
+
       - name: Install Heroku CLI
-        run: curl https://cli-assets.heroku.com/install.sh | sh
+        run: npm install -g heroku
+
+      - name: Verify Heroku CLI
+        run: heroku --version|- name: Setup Node
+        uses: actions/setup-node
+
+      - name: Install Heroku CLI
+        run: npm install -g heroku
+
+      - name: Verify Heroku CLI
+        run: heroku --version
 
       - name: Login to Heroku Container Registry
         run: heroku container:login
