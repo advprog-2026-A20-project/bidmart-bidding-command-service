@@ -28,7 +28,7 @@ jobs:
         uses: actions/setup-node@v4
 
       - name: Install Heroku CLI
-        run: npm install -g heroku
+        run: npm install -g --ignore-scripts heroku@11.4.0
 
       - name: Verify Heroku CLI
         run: heroku --version
