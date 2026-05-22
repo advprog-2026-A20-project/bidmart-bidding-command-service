@@ -2,9 +2,12 @@ package id.ac.ui.cs.advprog.biddingcommand.security;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.unauthenticated;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.ac.ui.cs.advprog.biddingcommand.dto.AuctionDetailResponse;
@@ -154,6 +157,8 @@ class SecurityBehaviorTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amount\":1500.00}"))
             .andExpect(status().isCreated());
+
+        verify(biddingCommandService).placeBid(any(UUID.class), any(), any(UUID.class));
     }
 
     @Test
@@ -165,6 +170,48 @@ class SecurityBehaviorTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amount\":1500.00}"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void placeBidWithoutAmountShouldReturn400() throws Exception {
+        String token = jwtService.generateToken(user(Role.BUYER));
+
+        mockMvc.perform(post("/api/auctions/{auctionId}/bids", AUCTION_ID)
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.amount").value("Bid amount is required"));
+
+        verify(biddingCommandService, never()).placeBid(any(UUID.class), any(), any(UUID.class));
+    }
+
+    @Test
+    void placeBidWithZeroAmountShouldReturn400() throws Exception {
+        String token = jwtService.generateToken(user(Role.BUYER));
+
+        mockMvc.perform(post("/api/auctions/{auctionId}/bids", AUCTION_ID)
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":0}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.amount").value("Bid amount must be positive"));
+
+        verify(biddingCommandService, never()).placeBid(any(UUID.class), any(), any(UUID.class));
+    }
+
+    @Test
+    void placeBidWithNegativeAmountShouldReturn400() throws Exception {
+        String token = jwtService.generateToken(user(Role.BUYER));
+
+        mockMvc.perform(post("/api/auctions/{auctionId}/bids", AUCTION_ID)
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":-1}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.amount").value("Bid amount must be positive"));
+
+        verify(biddingCommandService, never()).placeBid(any(UUID.class), any(), any(UUID.class));
     }
 
     @Test

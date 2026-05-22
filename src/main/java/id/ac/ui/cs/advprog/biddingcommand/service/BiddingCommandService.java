@@ -1,7 +1,6 @@
 package id.ac.ui.cs.advprog.biddingcommand.service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -25,32 +24,20 @@ import id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest;
 import id.ac.ui.cs.advprog.biddingcommand.model.Auction;
 import id.ac.ui.cs.advprog.biddingcommand.model.AuctionStatus;
 import id.ac.ui.cs.advprog.biddingcommand.model.Bid;
-import id.ac.ui.cs.advprog.biddingcommand.model.Listing;
-import id.ac.ui.cs.advprog.biddingcommand.model.ListingCategory;
-import id.ac.ui.cs.advprog.biddingcommand.model.ListingStatus;
 import id.ac.ui.cs.advprog.biddingcommand.model.User;
 import id.ac.ui.cs.advprog.biddingcommand.repository.AuctionRepository;
 import id.ac.ui.cs.advprog.biddingcommand.repository.BidRepository;
-import id.ac.ui.cs.advprog.biddingcommand.repository.ListingRepository;
-import id.ac.ui.cs.advprog.biddingcommand.repository.UserRepository;
 
 @Service
 public class BiddingCommandService {
 
     private static final Logger log = LoggerFactory.getLogger(BiddingCommandService.class);
 
-    private static final BigDecimal DEFAULT_MINIMUM_INCREMENT = money("1.00");
-    private static final long DEFAULT_DURATION_MINUTES = 60L;
-    private static final long MAX_DURATION_MINUTES = 14L * 24L * 60L;
     private static final Duration LAST_MINUTE_EXTENSION_WINDOW = Duration.ofMinutes(2);
-    private static final List<AuctionStatus> BIDDABLE_STATUSES = List.of(
-        AuctionStatus.ACTIVE,
-        AuctionStatus.EXTENDED
-    );
 
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
-    private final ListingRepository listingRepository;
+    private final ListingService listingService;
     private final WalletClient walletClient;
     private final Clock clock;
     private final Duration closedVisibilityDuration;
@@ -58,6 +45,8 @@ public class BiddingCommandService {
     private final AuctionValidator validator;
     private final AuctionResponseMapper responseMapper;
     private final AuctionOutcomeResolver outcomeResolver;
+    private final AuctionFactory auctionFactory;
+    private final ListingStatusSynchronizer listingStatusSynchronizer;
 
     private record BidPlacementContext(
         Auction auction,
@@ -70,30 +59,30 @@ public class BiddingCommandService {
     public BiddingCommandService(
         AuctionRepository auctionRepository,
         BidRepository bidRepository,
-        ListingRepository listingRepository,
-        UserRepository userRepository,
+        ListingService listingService,
         WalletClient walletClient,
         Clock clock,
         @Value("${auction.lifecycle.closed-visible-seconds:${AUCTION_CLOSED_VISIBLE_SECONDS:5}}")
         long closedVisibleSeconds,
-        ApplicationEventPublisher eventPublisher
+        ApplicationEventPublisher eventPublisher,
+        AuctionValidator validator,
+        AuctionResponseMapper responseMapper,
+        AuctionOutcomeResolver outcomeResolver,
+        AuctionFactory auctionFactory,
+        ListingStatusSynchronizer listingStatusSynchronizer
     ) {
         this.auctionRepository = auctionRepository;
         this.bidRepository = bidRepository;
-        this.listingRepository = listingRepository;
+        this.listingService = listingService;
         this.walletClient = walletClient;
         this.clock = clock;
         this.closedVisibilityDuration = Duration.ofSeconds(Math.max(0L, closedVisibleSeconds));
         this.eventPublisher = eventPublisher;
-        this.validator = new AuctionValidator(userRepository, clock, MAX_DURATION_MINUTES);
-        this.responseMapper = new AuctionResponseMapper();
-        this.outcomeResolver = new AuctionOutcomeResolver(
-            walletClient,
-            auctionRepository,
-            bidRepository,
-            eventPublisher,
-            clock
-        );
+        this.validator = validator;
+        this.responseMapper = responseMapper;
+        this.outcomeResolver = outcomeResolver;
+        this.auctionFactory = auctionFactory;
+        this.listingStatusSynchronizer = listingStatusSynchronizer;
     }
 
     @Scheduled(fixedDelayString = "${auction.lifecycle.scan-interval-ms:${AUCTION_LIFECYCLE_SCAN_INTERVAL_MS:1000}}")
@@ -102,7 +91,10 @@ public class BiddingCommandService {
         Instant now = Instant.now(clock);
 
         List<Auction> expiredAuctions =
-            auctionRepository.findExpiredBiddableAuctionsForUpdate(BIDDABLE_STATUSES, now);
+            auctionRepository.findExpiredBiddableAuctionsForUpdate(
+                listingStatusSynchronizer.biddableAuctionStatuses(),
+                now
+            );
 
         if (!expiredAuctions.isEmpty()) {
             log.info("Closing {} expired auctions at {}", expiredAuctions.size(), now);
@@ -134,21 +126,23 @@ public class BiddingCommandService {
 
     @Transactional
     public AuctionDetailResponse createAuction(AuctionCreateRequest request, UUID sellerId) {
-        validator.validateAuctionRequest(
-            request,
-            defaultDuration(request != null ? request.durationMinutes() : null)
-        );
+        long durationMinutes = auctionFactory.resolveDurationMinutes(request != null ? request.durationMinutes() : null);
+        validator.validateAuctionRequest(request, durationMinutes);
 
         User seller = validator.loadSeller(sellerId);
         Instant now = Instant.now(clock);
 
-        Listing listing = createAuctionListing(request, seller, now);
-        Auction auction = buildDraftAuction(request, listing, now);
+        Auction auction = auctionFactory.buildDraftAuction(
+            request,
+            listingService.createAuctionListing(request, seller, now),
+            now,
+            durationMinutes
+        );
 
         if (Boolean.TRUE.equals(request.activateNow())) {
             activateAuctionInternal(auction, now);
         } else {
-            syncListingStatus(auction);
+            listingStatusSynchronizer.syncListingStatus(auction);
         }
 
         Auction savedAuction = auctionRepository.save(auction);
@@ -233,7 +227,7 @@ public class BiddingCommandService {
         Bid leadingBid = bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(auctionId)
             .orElse(null);
 
-        BigDecimal bidAmount = normalizeMoney(request.amount());
+        BigDecimal bidAmount = auctionFactory.normalizeMoney(request.amount());
 
         validator.validateBidAmountAgainstMinimum(auction, leadingBid, bidAmount);
 
@@ -241,7 +235,7 @@ public class BiddingCommandService {
     }
 
     private boolean closeAuctionIfExpired(Auction auction, Instant now) {
-        if (!shouldCloseAuction(auction, now)) {
+        if (!validator.shouldCloseAuction(auction, now)) {
             return false;
         }
 
@@ -249,48 +243,16 @@ public class BiddingCommandService {
         return true;
     }
 
-    private boolean shouldCloseAuction(Auction auction, Instant now) {
-        return validator.shouldCloseAuction(auction, now);
-    }
-
     private void markAuctionClosed(Auction auction, Instant closedAt) {
-        if (!validator.isBiddableStatus(auction.getStatus())) {
+        if (!listingStatusSynchronizer.isAuctionBiddable(auction.getStatus())) {
             return;
         }
 
         auction.setStatus(AuctionStatus.CLOSED);
         auction.setClosedAt(closedAt);
 
-        syncListingStatus(auction);
+        listingStatusSynchronizer.syncListingStatus(auction);
         auctionRepository.save(auction);
-    }
-
-    private Listing createAuctionListing(AuctionCreateRequest request, User seller, Instant createdAt) {
-        Listing listing = Listing.builder()
-            .title(request.title().trim())
-            .description(request.description().trim())
-            .imageUrl(normalizeImageUrl(request.imageUrl()))
-            .price(normalizeMoney(request.startingPrice()))
-            .category(resolveCategory(request.category()))
-            .seller(seller)
-            .createdAt(createdAt)
-            .build();
-
-        return listingRepository.save(listing);
-    }
-
-    private Auction buildDraftAuction(AuctionCreateRequest request, Listing listing, Instant createdAt) {
-        return Auction.builder()
-            .listing(listing)
-            .status(AuctionStatus.DRAFT)
-            .startingPrice(normalizeMoney(request.startingPrice()))
-            .reservePrice(normalizeMoney(request.reservePrice()))
-            .minimumBidIncrement(normalizeMoney(defaultIncrement(request.minimumBidIncrement())))
-            .durationMinutes(defaultDuration(request.durationMinutes()))
-            .createdAt(createdAt)
-            .nextBidSequence(1L)
-            .extensionCount(0)
-            .build();
     }
 
     private void activateAuctionInternal(Auction auction, Instant now) {
@@ -299,7 +261,7 @@ public class BiddingCommandService {
         auction.setStartsAt(now);
         auction.setEndsAt(now.plus(Duration.ofMinutes(auction.getDurationMinutes())));
 
-        syncListingStatus(auction);
+        listingStatusSynchronizer.syncListingStatus(auction);
     }
 
     private void publishAuctionActivatedEventIfNeeded(Auction auction) {
@@ -369,7 +331,7 @@ public class BiddingCommandService {
 
             if (auction.getStatus() == AuctionStatus.ACTIVE) {
                 auction.setStatus(AuctionStatus.EXTENDED);
-                syncListingStatus(auction);
+                listingStatusSynchronizer.syncListingStatus(auction);
             }
         }
     }
@@ -392,27 +354,6 @@ public class BiddingCommandService {
         );
     }
 
-    private void syncListingStatus(Auction auction) {
-        if (auction == null || auction.getListing() == null || auction.getStatus() == null) {
-            return;
-        }
-
-        ListingStatus listingStatus = switch (auction.getStatus()) {
-            case DRAFT -> ListingStatus.DRAFT;
-            case ACTIVE -> ListingStatus.ACTIVE;
-            case EXTENDED -> ListingStatus.EXTENDED;
-            case CLOSED -> ListingStatus.CLOSED;
-            case WON -> ListingStatus.WON;
-            case UNSOLD -> ListingStatus.UNSOLD;
-            case CANCELLED -> ListingStatus.CANCELLED;
-        };
-
-        if (auction.getListing().getStatus() != listingStatus) {
-            auction.getListing().setStatus(listingStatus);
-            auction.getListing().setUpdatedAt(Instant.now(clock));
-        }
-    }
-
     private AuctionDetailResponse toDetailResponse(Auction auction) {
         return responseMapper.toDetailResponse(
             auction,
@@ -423,33 +364,5 @@ public class BiddingCommandService {
     private Auction loadAuctionForUpdate(UUID auctionId) {
         return auctionRepository.findByIdWithListingAndSellerForUpdate(auctionId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Auction not found"));
-    }
-
-    private BigDecimal normalizeMoney(BigDecimal amount) {
-        return amount.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private ListingCategory resolveCategory(ListingCategory category) {
-        return category != null ? category : ListingCategory.OTHER;
-    }
-
-    private BigDecimal defaultIncrement(BigDecimal increment) {
-        return increment == null ? DEFAULT_MINIMUM_INCREMENT : increment;
-    }
-
-    private long defaultDuration(Long durationMinutes) {
-        return durationMinutes == null ? DEFAULT_DURATION_MINUTES : durationMinutes;
-    }
-
-    private String normalizeImageUrl(String imageUrl) {
-        if (imageUrl == null || imageUrl.isBlank()) {
-            return null;
-        }
-
-        return imageUrl.trim();
-    }
-
-    private static BigDecimal money(String value) {
-        return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
     }
 }

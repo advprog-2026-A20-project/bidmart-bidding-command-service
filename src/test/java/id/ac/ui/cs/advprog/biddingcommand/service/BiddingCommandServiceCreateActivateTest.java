@@ -69,15 +69,36 @@ class BiddingCommandServiceCreateActivateTest {
 
     @BeforeEach
     void setUp() {
+        Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
+        ListingStatusSynchronizer listingStatusSynchronizer = new ListingStatusSynchronizer(fixedClock);
+        BidCalculator bidCalculator = new BidCalculator();
+        AuctionValidator auctionValidator = new AuctionValidator(
+            userRepository,
+            fixedClock,
+            bidCalculator,
+            listingStatusSynchronizer,
+            20160L
+        );
         biddingCommandService = new BiddingCommandService(
             auctionRepository,
             bidRepository,
-            listingRepository,
-            userRepository,
+            new ListingService(listingRepository, auctionRepository, fixedClock, listingStatusSynchronizer),
             walletClient,
-            Clock.fixed(NOW, ZoneOffset.UTC),
+            fixedClock,
             5L,
-            eventPublisher
+            eventPublisher,
+            auctionValidator,
+            new AuctionResponseMapper(bidCalculator, listingStatusSynchronizer),
+            new AuctionOutcomeResolver(
+                walletClient,
+                auctionRepository,
+                bidRepository,
+                eventPublisher,
+                bidCalculator,
+                listingStatusSynchronizer
+            ),
+            new AuctionFactory(),
+            listingStatusSynchronizer
         );
     }
 

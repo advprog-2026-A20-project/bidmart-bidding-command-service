@@ -53,10 +53,12 @@ class ListingServiceTest {
 
     @BeforeEach
     void setUp() {
+        Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
         listingService = new ListingService(
             listingRepository,
             auctionRepository,
-            Clock.fixed(NOW, ZoneOffset.UTC)
+            fixedClock,
+            new ListingStatusSynchronizer(fixedClock)
         );
     }
 

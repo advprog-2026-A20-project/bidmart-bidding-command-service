@@ -6,19 +6,27 @@ import id.ac.ui.cs.advprog.biddingcommand.model.Auction;
 import id.ac.ui.cs.advprog.biddingcommand.model.AuctionStatus;
 import id.ac.ui.cs.advprog.biddingcommand.model.Bid;
 import java.math.BigDecimal;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.stereotype.Component;
 
-final class AuctionResponseMapper {
+@Component
+public class AuctionResponseMapper {
 
-    private static final Comparator<Bid> LEADING_BID_COMPARATOR = Comparator
-        .comparing(Bid::getAmount)
-        .thenComparing(Bid::getSequenceNumber, Comparator.reverseOrder());
+    private final BidCalculator bidCalculator;
+    private final ListingStatusSynchronizer listingStatusSynchronizer;
+
+    public AuctionResponseMapper(
+        BidCalculator bidCalculator,
+        ListingStatusSynchronizer listingStatusSynchronizer
+    ) {
+        this.bidCalculator = bidCalculator;
+        this.listingStatusSynchronizer = listingStatusSynchronizer;
+    }
 
     AuctionDetailResponse toDetailResponse(Auction auction, List<Bid> bids) {
-        Bid leadingBid = selectLeadingBid(bids);
-        boolean reserveMet = leadingBid != null && leadingBid.getAmount().compareTo(auction.getReservePrice()) >= 0;
+        Bid leadingBid = bidCalculator.selectLeadingBid(bids);
+        boolean reserveMet = bidCalculator.isReserveMet(auction, leadingBid);
         Bid winningBid = auction.getStatus() == AuctionStatus.WON ? leadingBid : null;
         BigDecimal currentPrice = leadingBid == null ? auction.getListing().getPrice() : leadingBid.getAmount();
         return new AuctionDetailResponse(
@@ -40,20 +48,13 @@ final class AuctionResponseMapper {
             auction.getDurationMinutes(),
             auction.getExtensionCount(),
             bids.size(),
-            calculateNextMinimumBid(auction, leadingBid),
+            bidCalculator.calculateNextMinimumBid(auction, leadingBid),
             reserveMet,
-            isBiddableStatus(auction.getStatus()),
+            listingStatusSynchronizer.isAuctionBiddable(auction.getStatus()),
             leadingBid == null ? null : toBidResponse(auction, leadingBid, leadingBid),
             winningBid == null ? null : toBidResponse(auction, winningBid, leadingBid),
             bids.stream().map(bid -> toBidResponse(auction, bid, leadingBid)).toList()
         );
-    }
-
-    private BigDecimal calculateNextMinimumBid(Auction auction, Bid leadingBid) {
-        if (leadingBid == null) {
-            return auction.getStartingPrice();
-        }
-        return leadingBid.getAmount().add(auction.getMinimumBidIncrement());
     }
 
     private BidResponse toBidResponse(Auction auction, Bid bid, Bid leadingBid) {
@@ -63,7 +64,7 @@ final class AuctionResponseMapper {
         return new BidResponse(
             bid.getId(),
             bid.getBidder().getId(),
-            bid.getBidder().getEmail(),
+            maskEmail(bid.getBidder().getEmail()),
             bid.getAmount(),
             bid.getSequenceNumber(),
             bid.getSubmittedAt(),
@@ -71,11 +72,32 @@ final class AuctionResponseMapper {
         );
     }
 
-    private Bid selectLeadingBid(List<Bid> bids) {
-        return bids.stream().max(LEADING_BID_COMPARATOR).orElse(null);
-    }
+    private String maskEmail(String email) {
+        if (email == null) {
+            return null;
+        }
+        if (email.isBlank()) {
+            return email;
+        }
 
-    private boolean isBiddableStatus(AuctionStatus status) {
-        return status == AuctionStatus.ACTIVE || status == AuctionStatus.EXTENDED;
+        int atIndex = email.indexOf('@');
+        if (atIndex <= 0 || atIndex != email.lastIndexOf('@') || atIndex == email.length() - 1) {
+            return "***";
+        }
+
+        String localPart = email.substring(0, atIndex);
+        String domain = email.substring(atIndex);
+
+        if (localPart.length() == 1) {
+            return "*" + domain;
+        }
+        if (localPart.length() == 2) {
+            return localPart.charAt(0) + "*" + domain;
+        }
+
+        return localPart.charAt(0)
+            + "*".repeat(localPart.length() - 2)
+            + localPart.charAt(localPart.length() - 1)
+            + domain;
     }
 }

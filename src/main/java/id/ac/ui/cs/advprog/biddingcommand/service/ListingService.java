@@ -23,15 +23,18 @@ public class ListingService {
     private final ListingRepository listingRepository;
     private final AuctionRepository auctionRepository;
     private final Clock clock;
+    private final ListingStatusSynchronizer listingStatusSynchronizer;
 
     public ListingService(
         ListingRepository listingRepository,
         AuctionRepository auctionRepository,
-        Clock clock
+        Clock clock,
+        ListingStatusSynchronizer listingStatusSynchronizer
     ) {
         this.listingRepository = listingRepository;
         this.auctionRepository = auctionRepository;
         this.clock = clock;
+        this.listingStatusSynchronizer = listingStatusSynchronizer;
     }
 
     public Listing createAuctionListing(AuctionCreateRequest request, User seller, Instant createdAt) {
@@ -56,7 +59,7 @@ public class ListingService {
         }
 
         return auctionRepository.findByListingId(listingId)
-            .map(auction -> auction.getStatus() == AuctionStatus.ACTIVE || auction.getStatus() == AuctionStatus.EXTENDED)
+            .map(auction -> listingStatusSynchronizer.isAuctionBiddable(auction.getStatus()))
             .orElse(false);
     }
 
@@ -69,7 +72,7 @@ public class ListingService {
     }
 
     private boolean isBiddableListingStatus(ListingStatus status) {
-        return status == ListingStatus.ACTIVE || status == ListingStatus.EXTENDED;
+        return listingStatusSynchronizer.isListingBiddable(status);
     }
 
     private ListingCategory resolveCategory(ListingCategory category) {

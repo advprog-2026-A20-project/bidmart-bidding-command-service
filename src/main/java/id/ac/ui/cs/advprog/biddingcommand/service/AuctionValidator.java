@@ -6,7 +6,9 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import id.ac.ui.cs.advprog.biddingcommand.dto.AuctionCreateRequest;
@@ -19,15 +21,26 @@ import id.ac.ui.cs.advprog.biddingcommand.model.Role;
 import id.ac.ui.cs.advprog.biddingcommand.model.User;
 import id.ac.ui.cs.advprog.biddingcommand.repository.UserRepository;
 
-final class AuctionValidator {
+@Component
+public class AuctionValidator {
 
     private final UserRepository userRepository;
     private final Clock clock;
+    private final BidCalculator bidCalculator;
+    private final ListingStatusSynchronizer listingStatusSynchronizer;
     private final long maxDurationMinutes;
 
-    AuctionValidator(UserRepository userRepository, Clock clock, long maxDurationMinutes) {
+    public AuctionValidator(
+        UserRepository userRepository,
+        Clock clock,
+        BidCalculator bidCalculator,
+        ListingStatusSynchronizer listingStatusSynchronizer,
+        @Value("${auction.max-duration-minutes:20160}") long maxDurationMinutes
+    ) {
         this.userRepository = userRepository;
         this.clock = clock;
+        this.bidCalculator = bidCalculator;
+        this.listingStatusSynchronizer = listingStatusSynchronizer;
         this.maxDurationMinutes = maxDurationMinutes;
     }
 
@@ -99,13 +112,13 @@ final class AuctionValidator {
     }
 
     void ensureListingAcceptsBid(Auction auction) {
-        if (!isBiddableListingStatus(auction.getListing().getStatus())) {
+        if (!listingStatusSynchronizer.isListingBiddable(auction.getListing().getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Listing is not accepting bids");
         }
     }
 
     void ensureAuctionAcceptsBid(Auction auction, UUID bidderId) {
-        if (!isBiddableStatus(auction.getStatus())) {
+        if (!listingStatusSynchronizer.isAuctionBiddable(auction.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Auction is not accepting bids");
         }
         if (auction.getEndsAt() == null) {
@@ -120,14 +133,14 @@ final class AuctionValidator {
     }
 
     void validateBidAmountAgainstMinimum(Auction auction, Bid leadingBid, BigDecimal bidAmount) {
-        BigDecimal nextMinimumBid = calculateNextMinimumBid(auction, leadingBid);
+        BigDecimal nextMinimumBid = bidCalculator.calculateNextMinimumBid(auction, leadingBid);
         if (bidAmount.compareTo(nextMinimumBid) < 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Bid must be at least " + nextMinimumBid);
         }
     }
 
     void validateManualClosureAllowed(Auction auction, Instant now) {
-        if (!isBiddableStatus(auction.getStatus())) {
+        if (!listingStatusSynchronizer.isAuctionBiddable(auction.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Auction is already closed");
         }
         if (auction.getEndsAt() != null && now.isBefore(auction.getEndsAt())) {
@@ -139,23 +152,8 @@ final class AuctionValidator {
     }
 
     boolean shouldCloseAuction(Auction auction, Instant now) {
-        return isBiddableStatus(auction.getStatus())
+        return listingStatusSynchronizer.isAuctionBiddable(auction.getStatus())
             && auction.getEndsAt() != null
             && (auction.getEndsAt().equals(now) || auction.getEndsAt().isBefore(now));
-    }  
-
-    BigDecimal calculateNextMinimumBid(Auction auction, Bid leadingBid) {
-        if (leadingBid == null) {
-            return auction.getStartingPrice();
-        }
-        return leadingBid.getAmount().add(auction.getMinimumBidIncrement());
-    }
-
-    boolean isBiddableStatus(AuctionStatus status) {
-        return status == AuctionStatus.ACTIVE || status == AuctionStatus.EXTENDED;
-    }
-
-    private boolean isBiddableListingStatus(ListingStatus status) {
-        return status == ListingStatus.ACTIVE || status == ListingStatus.EXTENDED;
     }
 }
