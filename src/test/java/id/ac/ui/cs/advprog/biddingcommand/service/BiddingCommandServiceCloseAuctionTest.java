@@ -1,16 +1,33 @@
 package id.ac.ui.cs.advprog.biddingcommand.service;
 
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
+import org.mockito.InOrder;
+import org.mockito.Mock;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import id.ac.ui.cs.advprog.biddingcommand.dto.AuctionDetailResponse;
 import id.ac.ui.cs.advprog.biddingcommand.dto.BidResponse;
@@ -26,22 +43,6 @@ import id.ac.ui.cs.advprog.biddingcommand.repository.AuctionRepository;
 import id.ac.ui.cs.advprog.biddingcommand.repository.BidRepository;
 import id.ac.ui.cs.advprog.biddingcommand.repository.ListingRepository;
 import id.ac.ui.cs.advprog.biddingcommand.repository.UserRepository;
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class BiddingCommandServiceCloseAuctionTest {
@@ -86,6 +87,16 @@ class BiddingCommandServiceCloseAuctionTest {
             5L,
             eventPublisher
         );
+    }
+
+    private User seller() {
+        return User.builder()
+            .id(SELLER_ID)
+            .email("seller@bidmart.test")
+            .passwordHash("hash")
+            .role(Role.SELLER)
+            .createdAt(NOW.minusSeconds(3600))
+            .build();
     }
 
     @Test
@@ -284,6 +295,30 @@ class BiddingCommandServiceCloseAuctionTest {
         BidResponse second = response.bidHistory().get(1);
         assertFalse(first.winning());
         assertTrue(second.winning());
+    }
+
+    @Test
+    void getAuctionDetail_whenAuctionExpired_shouldCloseAuctionBeforeReturningDetail() {
+        Auction auction = activeAuction(seller(), NOW.minusSeconds(1));
+        auction.setStatus(AuctionStatus.EXTENDED);
+        auction.getListing().setStatus(ListingStatus.EXTENDED);
+
+    when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID))
+        .thenReturn(Optional.of(auction));
+
+    when(auctionRepository.save(any(Auction.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    when(bidRepository.findByAuctionIdOrderBySequenceNumberAsc(AUCTION_ID))
+        .thenReturn(List.of());
+
+        AuctionDetailResponse response = biddingCommandService.getAuctionDetail(AUCTION_ID);
+
+        assertEquals(AuctionStatus.CLOSED, auction.getStatus());
+        assertEquals(ListingStatus.CLOSED, auction.getListing().getStatus());
+        assertEquals(AuctionStatus.CLOSED, response.status());
+        assertFalse(response.biddable());
+        verify(auctionRepository).save(auction);
     }
 
     private User seller(UUID sellerId) {
