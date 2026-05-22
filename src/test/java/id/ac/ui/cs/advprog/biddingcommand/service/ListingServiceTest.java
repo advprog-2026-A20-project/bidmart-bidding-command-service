@@ -38,6 +38,9 @@ import org.springframework.web.server.ResponseStatusException;
 class ListingServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
+    private static final String CAMERA_TITLE = "Camera";
+    private static final String GOOD_CONDITION = "Good condition";
+    private static final BigDecimal STARTING_PRICE = new BigDecimal("1000.00");
     private static final BigDecimal DISPLAYED_PRICE = new BigDecimal("1234.50");
 
     @Mock
@@ -65,13 +68,13 @@ class ListingServiceTest {
 
         Listing listing = listingService.createAuctionListing(request, seller, NOW);
 
-        assertEquals("Camera", listing.getTitle());
-        assertEquals("Good condition", listing.getDescription());
+        assertEquals(CAMERA_TITLE, listing.getTitle());
+        assertEquals(GOOD_CONDITION, listing.getDescription());
     }
 
     @Test
     void createAuctionListingShouldDefaultCategoryToOtherWhenNull() {
-        AuctionCreateRequest request = requestWith("Camera", "Good condition", null, "https://img");
+        AuctionCreateRequest request = requestWith(CAMERA_TITLE, GOOD_CONDITION, null, "https://img");
         when(listingRepository.save(any(Listing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Listing listing = listingService.createAuctionListing(request, seller(), NOW);
@@ -81,7 +84,7 @@ class ListingServiceTest {
 
     @Test
     void createAuctionListingShouldNormalizeBlankImageUrlToNull() {
-        AuctionCreateRequest request = requestWith("Camera", "Good condition", ListingCategory.ELECTRONICS, "   ");
+        AuctionCreateRequest request = requestWith(CAMERA_TITLE, GOOD_CONDITION, ListingCategory.ELECTRONICS, "   ");
         when(listingRepository.save(any(Listing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Listing listing = listingService.createAuctionListing(request, seller(), NOW);
@@ -195,7 +198,7 @@ class ListingServiceTest {
             description,
             imageUrl,
             category,
-            new BigDecimal("1000.00"),
+            STARTING_PRICE,
             new BigDecimal("1500.00"),
             new BigDecimal("100.00"),
             60L,
@@ -216,9 +219,9 @@ class ListingServiceTest {
     private Listing listing(UUID id, ListingStatus status) {
         return Listing.builder()
             .id(id)
-            .title("Camera")
+            .title(CAMERA_TITLE)
             .description("Desc")
-            .price(new BigDecimal("1000.00"))
+            .price(STARTING_PRICE)
             .category(ListingCategory.ELECTRONICS)
             .seller(seller())
             .status(status)

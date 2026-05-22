@@ -36,7 +36,7 @@ import org.springframework.web.server.ResponseStatusException;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "security.jwt.secret=test-secret-please-change-32-chars",
+        "security.jwt.secret=abcdefghijklmnopqrstuvwxyz123456",
         "security.jwt.expiration-seconds=3600"
     }
 )
@@ -48,6 +48,14 @@ import org.springframework.web.server.ResponseStatusException;
 class GlobalExceptionHandlerTest {
 
     private static final String TIMESTAMP_PATH = "$.timestamp";
+    private static final String STATUS_PATH = "$.status";
+    private static final String ERROR_PATH = "$.error";
+    private static final String MESSAGE_PATH = "$.message";
+    private static final String PATH_PATH = "$.path";
+    private static final String FIELD_ERRORS_PATH = "$.fieldErrors";
+    private static final String VALIDATE_ENDPOINT = "/test/validate";
+    private static final String ACCESS_DENIED_ENDPOINT = "/test/access-denied";
+    private static final String NOT_FOUND_ENDPOINT = "/test/not-found";
     private static final String UNEXPECTED_ENDPOINT = "/test/unexpected";
 
     @Autowired
@@ -55,56 +63,56 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void validationErrorShouldReturn400WithFieldErrors() throws Exception {
-        mockMvc.perform(post("/test/validate")
+        mockMvc.perform(post(VALIDATE_ENDPOINT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath(TIMESTAMP_PATH).exists())
-            .andExpect(jsonPath("$.status").value(400))
-            .andExpect(jsonPath("$.error").value("Bad Request"))
-            .andExpect(jsonPath("$.message").value("Request validation failed"))
-            .andExpect(jsonPath("$.path").value("/test/validate"))
-            .andExpect(jsonPath("$.fieldErrors.name").value("Name is required"))
-            .andExpect(jsonPath("$.fieldErrors.quantity").value("Quantity is required"));
+            .andExpect(jsonPath(STATUS_PATH).value(400))
+            .andExpect(jsonPath(ERROR_PATH).value("Bad Request"))
+            .andExpect(jsonPath(MESSAGE_PATH).value("Request validation failed"))
+            .andExpect(jsonPath(PATH_PATH).value(VALIDATE_ENDPOINT))
+            .andExpect(jsonPath(FIELD_ERRORS_PATH + ".name").value("Name is required"))
+            .andExpect(jsonPath(FIELD_ERRORS_PATH + ".quantity").value("Quantity is required"));
     }
 
     @Test
     void malformedJsonShouldReturn400WithSafeMessage() throws Exception {
-        mockMvc.perform(post("/test/validate")
+        mockMvc.perform(post(VALIDATE_ENDPOINT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"item\","))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath(TIMESTAMP_PATH).exists())
-            .andExpect(jsonPath("$.status").value(400))
-            .andExpect(jsonPath("$.error").value("Bad Request"))
-            .andExpect(jsonPath("$.message").value("Malformed request body"))
-            .andExpect(jsonPath("$.path").value("/test/validate"))
-            .andExpect(jsonPath("$.fieldErrors").isEmpty())
-            .andExpect(jsonPath("$.message", not(containsString("Unexpected end-of-input"))));
+            .andExpect(jsonPath(STATUS_PATH).value(400))
+            .andExpect(jsonPath(ERROR_PATH).value("Bad Request"))
+            .andExpect(jsonPath(MESSAGE_PATH).value("Malformed request body"))
+            .andExpect(jsonPath(PATH_PATH).value(VALIDATE_ENDPOINT))
+            .andExpect(jsonPath(FIELD_ERRORS_PATH).isEmpty())
+            .andExpect(jsonPath(MESSAGE_PATH, not(containsString("Unexpected end-of-input"))));
     }
 
     @Test
     void accessDeniedShouldReturn403() throws Exception {
-        mockMvc.perform(get("/test/access-denied"))
+        mockMvc.perform(get(ACCESS_DENIED_ENDPOINT))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath(TIMESTAMP_PATH).exists())
-            .andExpect(jsonPath("$.status").value(403))
-            .andExpect(jsonPath("$.error").value("Forbidden"))
-            .andExpect(jsonPath("$.message").value("Access denied"))
-            .andExpect(jsonPath("$.path").value("/test/access-denied"))
-            .andExpect(jsonPath("$.fieldErrors").isEmpty());
+            .andExpect(jsonPath(STATUS_PATH).value(403))
+            .andExpect(jsonPath(ERROR_PATH).value("Forbidden"))
+            .andExpect(jsonPath(MESSAGE_PATH).value("Access denied"))
+            .andExpect(jsonPath(PATH_PATH).value(ACCESS_DENIED_ENDPOINT))
+            .andExpect(jsonPath(FIELD_ERRORS_PATH).isEmpty());
     }
 
     @Test
     void responseStatusExceptionShouldPreserveHttpStatus() throws Exception {
-        mockMvc.perform(get("/test/not-found"))
+        mockMvc.perform(get(NOT_FOUND_ENDPOINT))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath(TIMESTAMP_PATH).exists())
-            .andExpect(jsonPath("$.status").value(404))
-            .andExpect(jsonPath("$.error").value("Not Found"))
-            .andExpect(jsonPath("$.message").value("Missing resource"))
-            .andExpect(jsonPath("$.path").value("/test/not-found"))
-            .andExpect(jsonPath("$.fieldErrors").isEmpty());
+            .andExpect(jsonPath(STATUS_PATH).value(404))
+            .andExpect(jsonPath(ERROR_PATH).value("Not Found"))
+            .andExpect(jsonPath(MESSAGE_PATH).value("Missing resource"))
+            .andExpect(jsonPath(PATH_PATH).value(NOT_FOUND_ENDPOINT))
+            .andExpect(jsonPath(FIELD_ERRORS_PATH).isEmpty());
     }
 
     @Test
@@ -112,19 +120,19 @@ class GlobalExceptionHandlerTest {
         mockMvc.perform(get(UNEXPECTED_ENDPOINT))
             .andExpect(status().isInternalServerError())
             .andExpect(jsonPath(TIMESTAMP_PATH).exists())
-            .andExpect(jsonPath("$.status").value(500))
-            .andExpect(jsonPath("$.error").value("Internal Server Error"))
-            .andExpect(jsonPath("$.message").value("Internal server error"))
-            .andExpect(jsonPath("$.path").value(UNEXPECTED_ENDPOINT))
-            .andExpect(jsonPath("$.fieldErrors").isEmpty());
+            .andExpect(jsonPath(STATUS_PATH).value(500))
+            .andExpect(jsonPath(ERROR_PATH).value("Internal Server Error"))
+            .andExpect(jsonPath(MESSAGE_PATH).value("Internal server error"))
+            .andExpect(jsonPath(PATH_PATH).value(UNEXPECTED_ENDPOINT))
+            .andExpect(jsonPath(FIELD_ERRORS_PATH).isEmpty());
     }
 
     @Test
     void unexpectedExceptionShouldNotExposeStackTraceOrInternalExceptionMessage() throws Exception {
         mockMvc.perform(get(UNEXPECTED_ENDPOINT))
             .andExpect(status().isInternalServerError())
-            .andExpect(jsonPath("$.message", not(containsString("Database connection failed"))))
-            .andExpect(jsonPath("$.message", not(containsString("java.lang.RuntimeException"))))
+            .andExpect(jsonPath(MESSAGE_PATH, not(containsString("Database connection failed"))))
+            .andExpect(jsonPath(MESSAGE_PATH, not(containsString("java.lang.IllegalStateException"))))
             .andExpect(jsonPath("$.trace").doesNotExist())
             .andExpect(jsonPath("$.exception").doesNotExist());
     }
@@ -150,7 +158,7 @@ class GlobalExceptionHandlerTest {
 
         @GetMapping("/unexpected")
         String unexpected() {
-            throw new RuntimeException("Database connection failed");
+            throw new IllegalStateException("Database connection failed");
         }
     }
 

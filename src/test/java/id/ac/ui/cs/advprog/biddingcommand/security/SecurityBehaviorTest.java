@@ -36,17 +36,61 @@ import org.springframework.test.web.servlet.MockMvc;
     "spring.datasource.username=sa",
     "spring.datasource.password=",
     "spring.jpa.hibernate.ddl-auto=create-drop",
-    "security.jwt.secret=test-secret-please-change-32-chars",
+    "security.jwt.secret=abcdefghijklmnopqrstuvwxyz123456",
     "security.jwt.expiration-seconds=3600"
 })
 @AutoConfigureMockMvc
 class SecurityBehaviorTest {
 
-    private static final String JWT_SECRET = "test-secret-please-change-32-chars";
+    private static final String JWT_SIGNING_KEY = "abcdefghijklmnopqrstuvwxyz123456";
     private static final String AUCTIONS_ENDPOINT = "/api/auctions";
     private static final String AUTHORIZATION_HEADER = "Authorization";
+    private static final String BEARER_PREFIX = "Bearer ";
     private static final UUID AUCTION_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
-
+    private static final BigDecimal AMOUNT_1000 = new BigDecimal("1000.00");
+    private static final BigDecimal AMOUNT_1500 = new BigDecimal("1500.00");
+    private static final BigDecimal AMOUNT_0100 = new BigDecimal("100.00");
+    private static final BigDecimal AMOUNT_1100 = new BigDecimal("1100.00");
+    private static final Instant DUMMY_NOW = Instant.parse("2026-01-01T00:00:00Z");
+    private static final AuctionDetailResponse DUMMY_RESPONSE = new AuctionDetailResponse(
+        AUCTION_ID,
+        UUID.fromString("55555555-5555-5555-5555-555555555555"),
+        "Vintage Camera",
+        "Working condition",
+        UUID.fromString("11111111-1111-1111-1111-111111111111"),
+        "seller@bidmart.test",
+        AMOUNT_1000,
+        AMOUNT_1000,
+        AMOUNT_1500,
+        AMOUNT_0100,
+        AuctionStatus.DRAFT,
+        DUMMY_NOW,
+        DUMMY_NOW.plusSeconds(60),
+        DUMMY_NOW.plusSeconds(3660),
+        null,
+        60L,
+        0,
+        0L,
+        AMOUNT_1100,
+        false,
+        true,
+        null,
+        null,
+        List.of()
+    );
+    private static final String AUCTION_CREATE_REQUEST_JSON = """
+        {
+          "title": "Vintage Camera",
+          "description": "Working condition",
+          "imageUrl": "https://example.com/camera.jpg",
+          "category": "ELECTRONICS",
+          "startingPrice": 1000.00,
+          "reservePrice": 1500.00,
+          "minimumBidIncrement": 100.00,
+          "durationMinutes": 60,
+          "activateNow": false
+        }
+        """;
     @Autowired
     private MockMvc mockMvc;
 
@@ -58,11 +102,10 @@ class SecurityBehaviorTest {
 
     @BeforeEach
     void setUp() {
-        AuctionDetailResponse response = dummyAuctionDetailResponse();
-        given(biddingCommandService.createAuction(any(), any(UUID.class))).willReturn(response);
-        given(biddingCommandService.placeBid(any(UUID.class), any(), any(UUID.class))).willReturn(response);
-        given(biddingCommandService.activateAuction(any(UUID.class), any(UUID.class))).willReturn(response);
-        given(biddingCommandService.closeAuction(any(UUID.class), any(UUID.class))).willReturn(response);
+        given(biddingCommandService.createAuction(any(), any(UUID.class))).willReturn(DUMMY_RESPONSE);
+        given(biddingCommandService.placeBid(any(UUID.class), any(), any(UUID.class))).willReturn(DUMMY_RESPONSE);
+        given(biddingCommandService.activateAuction(any(UUID.class), any(UUID.class))).willReturn(DUMMY_RESPONSE);
+        given(biddingCommandService.closeAuction(any(UUID.class), any(UUID.class))).willReturn(DUMMY_RESPONSE);
     }
 
     @Test
@@ -75,7 +118,7 @@ class SecurityBehaviorTest {
     void protectedEndpointWithoutTokenShouldReturn401() throws Exception {
         mockMvc.perform(post(AUCTIONS_ENDPOINT)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(validAuctionCreateRequest()))
+                .content(AUCTION_CREATE_REQUEST_JSON))
             .andExpect(status().isUnauthorized())
             .andExpect(unauthenticated());
     }
@@ -85,9 +128,9 @@ class SecurityBehaviorTest {
         String token = jwtService.generateToken(user(Role.SELLER));
 
         mockMvc.perform(post(AUCTIONS_ENDPOINT)
-                .header(AUTHORIZATION_HEADER, "Bearer " + token)
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(validAuctionCreateRequest()))
+                .content(AUCTION_CREATE_REQUEST_JSON))
             .andExpect(status().isCreated());
     }
 
@@ -96,9 +139,9 @@ class SecurityBehaviorTest {
         String token = jwtService.generateToken(user(Role.BUYER));
 
         mockMvc.perform(post(AUCTIONS_ENDPOINT)
-                .header(AUTHORIZATION_HEADER, "Bearer " + token)
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(validAuctionCreateRequest()))
+                .content(AUCTION_CREATE_REQUEST_JSON))
             .andExpect(status().isForbidden());
     }
 
@@ -107,7 +150,7 @@ class SecurityBehaviorTest {
         String token = jwtService.generateToken(user(Role.BUYER));
 
         mockMvc.perform(post("/api/auctions/{auctionId}/bids", AUCTION_ID)
-                .header(AUTHORIZATION_HEADER, "Bearer " + token)
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amount\":1500.00}"))
             .andExpect(status().isCreated());
@@ -118,7 +161,7 @@ class SecurityBehaviorTest {
         String token = jwtService.generateToken(user(Role.SELLER));
 
         mockMvc.perform(post("/api/auctions/{auctionId}/bids", AUCTION_ID)
-                .header(AUTHORIZATION_HEADER, "Bearer " + token)
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amount\":1500.00}"))
             .andExpect(status().isForbidden());
@@ -127,9 +170,9 @@ class SecurityBehaviorTest {
     @Test
     void malformedTokenShouldReturn401Not500() throws Exception {
         mockMvc.perform(post(AUCTIONS_ENDPOINT)
-                .header(AUTHORIZATION_HEADER, "Bearer malformed.token.value")
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + "malformed.token.value")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(validAuctionCreateRequest()))
+                .content(AUCTION_CREATE_REQUEST_JSON))
             .andExpect(status().isUnauthorized())
             .andExpect(unauthenticated());
     }
@@ -143,15 +186,15 @@ class SecurityBehaviorTest {
             .claim("email", "seller@bidmart.test")
             .claim("role", "INVALID_ROLE")
             .signWith(
-                Keys.hmacShaKeyFor(JWT_SECRET.getBytes(StandardCharsets.UTF_8)),
+                Keys.hmacShaKeyFor(JWT_SIGNING_KEY.getBytes(StandardCharsets.UTF_8)),
                 SignatureAlgorithm.HS256
             )
             .compact();
 
         mockMvc.perform(post(AUCTIONS_ENDPOINT)
-                .header(AUTHORIZATION_HEADER, "Bearer " + token)
+                .header(AUTHORIZATION_HEADER, BEARER_PREFIX + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(validAuctionCreateRequest()))
+                .content(AUCTION_CREATE_REQUEST_JSON))
             .andExpect(status().isUnauthorized())
             .andExpect(unauthenticated());
     }
@@ -168,49 +211,4 @@ class SecurityBehaviorTest {
             .build();
     }
 
-    private String validAuctionCreateRequest() {
-        return """
-            {
-              "title": "Vintage Camera",
-              "description": "Working condition",
-              "imageUrl": "https://example.com/camera.jpg",
-              "category": "ELECTRONICS",
-              "startingPrice": 1000.00,
-              "reservePrice": 1500.00,
-              "minimumBidIncrement": 100.00,
-              "durationMinutes": 60,
-              "activateNow": false
-            }
-            """;
-    }
-
-    private AuctionDetailResponse dummyAuctionDetailResponse() {
-        Instant now = Instant.parse("2026-01-01T00:00:00Z");
-        return new AuctionDetailResponse(
-            AUCTION_ID,
-            UUID.fromString("55555555-5555-5555-5555-555555555555"),
-            "Vintage Camera",
-            "Working condition",
-            UUID.fromString("11111111-1111-1111-1111-111111111111"),
-            "seller@bidmart.test",
-            new BigDecimal("1000.00"),
-            new BigDecimal("1000.00"),
-            new BigDecimal("1500.00"),
-            new BigDecimal("100.00"),
-            AuctionStatus.DRAFT,
-            now,
-            now.plusSeconds(60),
-            now.plusSeconds(3660),
-            null,
-            60L,
-            0,
-            0L,
-            new BigDecimal("1100.00"),
-            false,
-            true,
-            null,
-            null,
-            List.of()
-        );
-    }
 }

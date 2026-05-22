@@ -48,6 +48,10 @@ import id.ac.ui.cs.advprog.biddingcommand.repository.UserRepository;
 class BiddingCommandServiceCloseAuctionTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T10:15:30Z");
+    private static final BigDecimal BID_1200 = new BigDecimal("1200.00");
+    private static final BigDecimal BID_1600 = new BigDecimal("1600.00");
+    private static final BigDecimal STARTING_PRICE = new BigDecimal("1000.00");
+    private static final String BUYER_EMAIL = "buyer@example.test";
     private static final String OTHER_BIDDER_EMAIL = "other@example.test";
     private static final UUID SELLER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID OTHER_SELLER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -179,8 +183,8 @@ class BiddingCommandServiceCloseAuctionTest {
     @Test
     void closeAuctionWhenReserveMetShouldCaptureFundsAndSetWon() {
         Auction auction = activeAuction(seller(SELLER_ID), NOW.minusSeconds(1));
-        Bid leadingBid = bid(otherBuyer(), new BigDecimal("1600.00"), 2L, OTHER_BIDDER_EMAIL);
-        Bid lowerBid = bid(buyer(), new BigDecimal("1200.00"), 1L, "buyer@example.test");
+        Bid leadingBid = bid(otherBuyer(), BID_1600, 2L, OTHER_BIDDER_EMAIL);
+        Bid lowerBid = bid(buyer(), BID_1200, 1L, BUYER_EMAIL);
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller(SELLER_ID)));
         when(bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(AUCTION_ID)).thenReturn(Optional.of(leadingBid));
@@ -190,8 +194,8 @@ class BiddingCommandServiceCloseAuctionTest {
         AuctionDetailResponse response = biddingCommandService.closeAuction(AUCTION_ID, SELLER_ID);
 
         InOrder inOrder = inOrder(walletClient, auctionRepository, eventPublisher);
-        inOrder.verify(walletClient).captureFunds(OTHER_BIDDER_ID, AUCTION_ID, new BigDecimal("1600.00"));
-        inOrder.verify(walletClient).creditFunds(SELLER_ID, AUCTION_ID, new BigDecimal("1600.00"));
+        inOrder.verify(walletClient).captureFunds(OTHER_BIDDER_ID, AUCTION_ID, BID_1600);
+        inOrder.verify(walletClient).creditFunds(SELLER_ID, AUCTION_ID, BID_1600);
         assertEquals(AuctionStatus.WON, auction.getStatus());
         assertEquals(ListingStatus.WON, auction.getListing().getStatus());
         assertEquals(AuctionStatus.WON, response.status());
@@ -205,7 +209,7 @@ class BiddingCommandServiceCloseAuctionTest {
     @Test
     void closeAuctionWhenReserveNotMetShouldReleaseFundsAndSetUnsold() {
         Auction auction = activeAuction(seller(SELLER_ID), NOW.minusSeconds(1));
-        Bid leadingBid = bid(buyer(), new BigDecimal("1200.00"), 1L, "buyer@example.test");
+        Bid leadingBid = bid(buyer(), BID_1200, 1L, BUYER_EMAIL);
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller(SELLER_ID)));
         when(bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(AUCTION_ID)).thenReturn(Optional.of(leadingBid));
@@ -214,7 +218,7 @@ class BiddingCommandServiceCloseAuctionTest {
 
         AuctionDetailResponse response = biddingCommandService.closeAuction(AUCTION_ID, SELLER_ID);
 
-        verify(walletClient).releaseFunds(BUYER_ID, AUCTION_ID, new BigDecimal("1200.00"));
+        verify(walletClient).releaseFunds(BUYER_ID, AUCTION_ID, BID_1200);
         verify(walletClient, never()).captureFunds(any(), any(), any());
         assertEquals(AuctionStatus.UNSOLD, auction.getStatus());
         assertEquals(ListingStatus.UNSOLD, auction.getListing().getStatus());
@@ -241,13 +245,13 @@ class BiddingCommandServiceCloseAuctionTest {
         assertEquals(0L, response.totalBids());
         assertNull(response.leadingBid());
         assertNull(response.winningBid());
-        assertEquals(new BigDecimal("1000.00"), response.nextMinimumBid());
+        assertEquals(STARTING_PRICE, response.nextMinimumBid());
     }
 
     @Test
     void closeAuctionShouldPublishAuctionResolvedEvent() {
         Auction auction = activeAuction(seller(SELLER_ID), NOW.minusSeconds(1));
-        Bid leadingBid = bid(otherBuyer(), new BigDecimal("1600.00"), 2L, OTHER_BIDDER_EMAIL);
+        Bid leadingBid = bid(otherBuyer(), BID_1600, 2L, OTHER_BIDDER_EMAIL);
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller(SELLER_ID)));
         when(bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(AUCTION_ID)).thenReturn(Optional.of(leadingBid));
@@ -262,8 +266,8 @@ class BiddingCommandServiceCloseAuctionTest {
     @Test
     void getAuctionDetailShouldReturnDetailWithLeadingBid() {
         Auction auction = activeAuction(seller(SELLER_ID), NOW.minusSeconds(1));
-        Bid leadingBid = bid(otherBuyer(), new BigDecimal("1600.00"), 2L, OTHER_BIDDER_EMAIL);
-        Bid lowerBid = bid(buyer(), new BigDecimal("1200.00"), 1L, "buyer@example.test");
+        Bid leadingBid = bid(otherBuyer(), BID_1600, 2L, OTHER_BIDDER_EMAIL);
+        Bid lowerBid = bid(buyer(), BID_1200, 1L, BUYER_EMAIL);
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller(SELLER_ID)));
         when(bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(AUCTION_ID)).thenReturn(Optional.of(leadingBid));
@@ -274,15 +278,15 @@ class BiddingCommandServiceCloseAuctionTest {
 
         assertNotNull(response.leadingBid());
         assertEquals(OTHER_BIDDER_ID, response.leadingBid().bidderId());
-        assertEquals(new BigDecimal("1600.00"), response.leadingBid().amount());
-        assertEquals(new BigDecimal("1600.00"), response.currentPrice());
+        assertEquals(BID_1600, response.leadingBid().amount());
+        assertEquals(BID_1600, response.currentPrice());
     }
 
     @Test
     void getBidHistoryShouldMarkOnlyLeadingBidAsWinningWhenAuctionNotUnsold() {
         Auction auction = activeAuction(seller(SELLER_ID), NOW.minusSeconds(1));
-        Bid lowerBid = bid(buyer(), new BigDecimal("1200.00"), 1L, "buyer@example.test");
-        Bid leadingBid = bid(otherBuyer(), new BigDecimal("1600.00"), 2L, OTHER_BIDDER_EMAIL);
+        Bid lowerBid = bid(buyer(), BID_1200, 1L, BUYER_EMAIL);
+        Bid leadingBid = bid(otherBuyer(), BID_1600, 2L, OTHER_BIDDER_EMAIL);
         when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(userRepository.findById(SELLER_ID)).thenReturn(Optional.of(seller(SELLER_ID)));
         when(bidRepository.findTopByAuctionIdOrderByAmountDescSequenceNumberAsc(AUCTION_ID)).thenReturn(Optional.of(leadingBid));
@@ -299,19 +303,19 @@ class BiddingCommandServiceCloseAuctionTest {
     }
 
     @Test
-    void getAuctionDetail_whenAuctionExpired_shouldCloseAuctionBeforeReturningDetail() {
+    void getAuctionDetailWhenAuctionExpiredShouldCloseAuctionBeforeReturningDetail() {
         Auction auction = activeAuction(seller(), NOW.minusSeconds(1));
         auction.setStatus(AuctionStatus.EXTENDED);
         auction.getListing().setStatus(ListingStatus.EXTENDED);
 
-    when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID))
-        .thenReturn(Optional.of(auction));
+        when(auctionRepository.findByIdWithListingAndSellerForUpdate(AUCTION_ID))
+            .thenReturn(Optional.of(auction));
 
-    when(auctionRepository.save(any(Auction.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+        when(auctionRepository.save(any(Auction.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
 
-    when(bidRepository.findByAuctionIdOrderBySequenceNumberAsc(AUCTION_ID))
-        .thenReturn(List.of());
+        when(bidRepository.findByAuctionIdOrderBySequenceNumberAsc(AUCTION_ID))
+            .thenReturn(List.of());
 
         AuctionDetailResponse response = biddingCommandService.getAuctionDetail(AUCTION_ID);
 
@@ -333,7 +337,7 @@ class BiddingCommandServiceCloseAuctionTest {
     }
 
     private User buyer() {
-        return user(BUYER_ID, "buyer@example.test");
+        return user(BUYER_ID, BUYER_EMAIL);
     }
 
     private User otherBuyer() {
@@ -355,7 +359,7 @@ class BiddingCommandServiceCloseAuctionTest {
             .id(LISTING_ID)
             .title("Vintage Camera")
             .description("Well kept camera")
-            .price(new BigDecimal("1000.00"))
+            .price(STARTING_PRICE)
             .category(ListingCategory.ELECTRONICS)
             .seller(seller)
             .status(ListingStatus.ACTIVE)
@@ -366,7 +370,7 @@ class BiddingCommandServiceCloseAuctionTest {
             .id(AUCTION_ID)
             .listing(listing)
             .status(AuctionStatus.ACTIVE)
-            .startingPrice(new BigDecimal("1000.00"))
+            .startingPrice(STARTING_PRICE)
             .reservePrice(new BigDecimal("1500.00"))
             .minimumBidIncrement(new BigDecimal("100.00"))
             .durationMinutes(60L)

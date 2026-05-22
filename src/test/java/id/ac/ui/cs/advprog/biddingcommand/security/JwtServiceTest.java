@@ -20,12 +20,12 @@ import org.junit.jupiter.api.Test;
 
 class JwtServiceTest {
 
-    private static final String VALID_SECRET = "12345678901234567890123456789012";
-    private static final String OTHER_SECRET = "abcdefghijklmnopqrstuvwxyz123456";
+    private static final String PRIMARY_SIGNING_KEY = "12345678901234567890123456789012";
+    private static final String SECONDARY_SIGNING_KEY = "abcdefghijklmnopqrstuvwxyz123456";
 
     @Test
     void generateTokenShouldCreateTokenWithUserIdEmailAndRole() {
-        JwtService jwtService = new JwtService(VALID_SECRET, 3600);
+        JwtService jwtService = new JwtService(PRIMARY_SIGNING_KEY, 3600);
         User user = createUser();
 
         String token = jwtService.generateToken(user);
@@ -38,7 +38,7 @@ class JwtServiceTest {
 
     @Test
     void isValidShouldReturnTrueForValidToken() {
-        JwtService jwtService = new JwtService(VALID_SECRET, 3600);
+        JwtService jwtService = new JwtService(PRIMARY_SIGNING_KEY, 3600);
 
         String token = jwtService.generateToken(createUser());
 
@@ -47,15 +47,15 @@ class JwtServiceTest {
 
     @Test
     void isValidShouldReturnFalseForMalformedToken() {
-        JwtService jwtService = new JwtService(VALID_SECRET, 3600);
+        JwtService jwtService = new JwtService(PRIMARY_SIGNING_KEY, 3600);
 
         assertFalse(jwtService.isValid("not-a-jwt"));
     }
 
     @Test
     void isValidShouldReturnFalseForTokenWithInvalidSignature() {
-        JwtService signingService = new JwtService(OTHER_SECRET, 3600);
-        JwtService validatingService = new JwtService(VALID_SECRET, 3600);
+        JwtService signingService = new JwtService(SECONDARY_SIGNING_KEY, 3600);
+        JwtService validatingService = new JwtService(PRIMARY_SIGNING_KEY, 3600);
 
         String token = signingService.generateToken(createUser());
 
@@ -64,7 +64,7 @@ class JwtServiceTest {
 
     @Test
     void isValidShouldReturnFalseForExpiredToken() {
-        JwtService jwtService = new JwtService(VALID_SECRET, -1);
+        JwtService jwtService = new JwtService(PRIMARY_SIGNING_KEY, -1);
 
         String token = jwtService.generateToken(createUser());
 
@@ -84,7 +84,7 @@ class JwtServiceTest {
 
     @Test
     void extractMethodsShouldReturnExpectedClaimsForValidToken() {
-        JwtService jwtService = new JwtService(VALID_SECRET, 3600);
+        JwtService jwtService = new JwtService(PRIMARY_SIGNING_KEY, 3600);
         User user = createUser();
         String token = Jwts.builder()
             .setSubject(user.getId().toString())
@@ -93,7 +93,7 @@ class JwtServiceTest {
             .claim("email", user.getEmail())
             .claim("role", user.getRole().name())
             .signWith(
-                Keys.hmacShaKeyFor(VALID_SECRET.getBytes(StandardCharsets.UTF_8)),
+                Keys.hmacShaKeyFor(PRIMARY_SIGNING_KEY.getBytes(StandardCharsets.UTF_8)),
                 SignatureAlgorithm.HS256
             )
             .compact();

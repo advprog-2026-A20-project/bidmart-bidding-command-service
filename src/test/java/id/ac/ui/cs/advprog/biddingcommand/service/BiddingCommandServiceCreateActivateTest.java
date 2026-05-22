@@ -41,6 +41,7 @@ import org.springframework.web.server.ResponseStatusException;
 class BiddingCommandServiceCreateActivateTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T10:15:30Z");
+    private static final BigDecimal STARTING_PRICE = new BigDecimal("1000.00");
     private static final UUID SELLER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID OTHER_SELLER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID AUCTION_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
@@ -176,7 +177,7 @@ class BiddingCommandServiceCreateActivateTest {
     @Test
     void createAuctionWithReservePriceLowerThanStartingPriceShouldThrowBadRequest() {
         assertBadRequest(
-            validRequest(false).withStartingPrice(new BigDecimal("1000.00")).withReservePrice(new BigDecimal("999.99")),
+            validRequest(false).withStartingPrice(STARTING_PRICE).withReservePrice(new BigDecimal("999.99")),
             "Reserve price must be greater than or equal to starting price"
         );
     }
@@ -272,7 +273,7 @@ class BiddingCommandServiceCreateActivateTest {
             .description("Well kept camera")
             .imageUrl("https://example.com/camera.jpg")
             .category(ListingCategory.ELECTRONICS)
-            .startingPrice(new BigDecimal("1000.00"))
+            .startingPrice(STARTING_PRICE)
             .reservePrice(new BigDecimal("1500.00"))
             .minimumBidIncrement(new BigDecimal("100.00"))
             .durationMinutes(60L)
@@ -294,7 +295,7 @@ class BiddingCommandServiceCreateActivateTest {
             .id(LISTING_ID)
             .title("Vintage Camera")
             .description("Well kept camera")
-            .price(new BigDecimal("1000.00"))
+            .price(STARTING_PRICE)
             .category(ListingCategory.ELECTRONICS)
             .seller(seller)
             .status(ListingStatus.DRAFT)
@@ -304,7 +305,7 @@ class BiddingCommandServiceCreateActivateTest {
             .id(AUCTION_ID)
             .listing(listing)
             .status(AuctionStatus.DRAFT)
-            .startingPrice(new BigDecimal("1000.00"))
+            .startingPrice(STARTING_PRICE)
             .reservePrice(new BigDecimal("1500.00"))
             .minimumBidIncrement(new BigDecimal("100.00"))
             .durationMinutes(60L)

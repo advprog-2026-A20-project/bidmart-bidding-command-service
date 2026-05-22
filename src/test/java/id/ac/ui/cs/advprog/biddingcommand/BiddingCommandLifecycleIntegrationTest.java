@@ -39,12 +39,14 @@ import id.ac.ui.cs.advprog.biddingcommand.service.WalletClient;
     "spring.jpa.hibernate.ddl-auto=create-drop",
     "auction.lifecycle.scan-interval-ms=3600000",
     "auction.lifecycle.closed-visible-seconds=5",
-    "security.jwt.secret=test-secret-please-change-32-chars",
+    "security.jwt.secret=abcdefghijklmnopqrstuvwxyz123456",
     "security.jwt.expiration-seconds=3600"
 })
 @ActiveProfiles("local")
 @Transactional
 class BiddingCommandLifecycleIntegrationTest {
+
+    private static final BigDecimal AMOUNT_1000 = new BigDecimal("1000.00");
 
     @Autowired
     private BiddingCommandService biddingCommandService;
@@ -81,7 +83,7 @@ class BiddingCommandLifecycleIntegrationTest {
 
     @Test
     void expiredAuctionFirstMovesToVisibleClosedState() {
-        Auction auction = auctionRepository.save(auction(AuctionStatus.ACTIVE, ListingStatus.ACTIVE, "1000.00"));
+        Auction auction = auctionRepository.save(auction(AuctionStatus.ACTIVE, ListingStatus.ACTIVE, AMOUNT_1000.toString()));
         auction.setEndsAt(Instant.now().minus(1, ChronoUnit.MINUTES));
         auctionRepository.saveAndFlush(auction);
 
@@ -99,7 +101,7 @@ class BiddingCommandLifecycleIntegrationTest {
 
     @Test
     void closedAuctionWithReserveMetResolvesWonAndCreditsSeller() {
-        Auction auction = auctionRepository.save(auction(AuctionStatus.CLOSED, ListingStatus.CLOSED, "1000.00"));
+        Auction auction = auctionRepository.save(auction(AuctionStatus.CLOSED, ListingStatus.CLOSED, AMOUNT_1000.toString()));
         auction.setClosedAt(Instant.now().minus(10, ChronoUnit.SECONDS));
         bidRepository.save(bid(auction, buyer, "1500.00"));
         auctionRepository.saveAndFlush(auction);
@@ -130,28 +132,28 @@ class BiddingCommandLifecycleIntegrationTest {
 
     @Test
     void higherBidFromDifferentBuyerHoldsNewBidAndReleasesPreviousLeader() {
-        Auction auction = auctionRepository.save(auction(AuctionStatus.ACTIVE, ListingStatus.ACTIVE, "1000.00"));
+        Auction auction = auctionRepository.save(auction(AuctionStatus.ACTIVE, ListingStatus.ACTIVE, AMOUNT_1000.toString()));
         auction.setEndsAt(Instant.now().plus(10, ChronoUnit.MINUTES));
         auctionRepository.saveAndFlush(auction);
 
-        biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(new BigDecimal("1000.00")), buyer.getId());
+        biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(AMOUNT_1000), buyer.getId());
         biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(new BigDecimal("2000.00")), buyerB.getId());
 
-        verify(walletClient).holdFunds(buyer.getId(), auction.getId(), new BigDecimal("1000.00"));
+        verify(walletClient).holdFunds(buyer.getId(), auction.getId(), AMOUNT_1000);
         verify(walletClient).holdFunds(buyerB.getId(), auction.getId(), new BigDecimal("2000.00"));
-        verify(walletClient).releaseFunds(buyer.getId(), auction.getId(), new BigDecimal("1000.00"));
+        verify(walletClient).releaseFunds(buyer.getId(), auction.getId(), AMOUNT_1000);
     }
 
     @Test
     void higherBidFromSameBuyerOnlyHoldsDifferenceWithoutRelease() {
-        Auction auction = auctionRepository.save(auction(AuctionStatus.ACTIVE, ListingStatus.ACTIVE, "1000.00"));
+        Auction auction = auctionRepository.save(auction(AuctionStatus.ACTIVE, ListingStatus.ACTIVE, AMOUNT_1000.toString()));
         auction.setEndsAt(Instant.now().plus(10, ChronoUnit.MINUTES));
         auctionRepository.saveAndFlush(auction);
 
-        biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(new BigDecimal("1000.00")), buyer.getId());
+        biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(AMOUNT_1000), buyer.getId());
         biddingCommandService.placeBid(auction.getId(), new id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest(new BigDecimal("2000.00")), buyer.getId());
 
-        verify(walletClient, times(2)).holdFunds(buyer.getId(), auction.getId(), new BigDecimal("1000.00"));
+        verify(walletClient, times(2)).holdFunds(buyer.getId(), auction.getId(), AMOUNT_1000);
         verify(walletClient, never()).releaseFunds(
             org.mockito.ArgumentMatchers.eq(buyer.getId()),
             org.mockito.ArgumentMatchers.eq(auction.getId()),
@@ -161,7 +163,7 @@ class BiddingCommandLifecycleIntegrationTest {
 
     @Test
     void expiredExtendedAuctionMovesToClosedState() {
-        Auction auction = auctionRepository.save(auction(AuctionStatus.EXTENDED, ListingStatus.EXTENDED, "1000.00"));
+        Auction auction = auctionRepository.save(auction(AuctionStatus.EXTENDED, ListingStatus.EXTENDED, AMOUNT_1000.toString()));
         auction.setEndsAt(Instant.now().minus(1, ChronoUnit.MINUTES));
         auctionRepository.saveAndFlush(auction);
 
@@ -185,7 +187,7 @@ class BiddingCommandLifecycleIntegrationTest {
         Listing listing = listingRepository.save(Listing.builder()
             .title("Phone")
             .description("Auction phone")
-            .price(new BigDecimal("1000.00"))
+            .price(AMOUNT_1000)
             .category(ListingCategory.ELECTRONICS)
             .seller(seller)
             .status(listingStatus)
@@ -195,7 +197,7 @@ class BiddingCommandLifecycleIntegrationTest {
         return Auction.builder()
             .listing(listing)
             .status(auctionStatus)
-            .startingPrice(new BigDecimal("1000.00"))
+            .startingPrice(AMOUNT_1000)
             .reservePrice(new BigDecimal(reservePrice))
             .minimumBidIncrement(new BigDecimal("100.00"))
             .durationMinutes(1L)

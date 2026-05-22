@@ -44,6 +44,7 @@ import org.springframework.web.server.ResponseStatusException;
 class BiddingCommandServicePlaceBidTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T10:15:30Z");
+    private static final BigDecimal STARTING_PRICE = new BigDecimal("1000.00");
     private static final BigDecimal BID_1200 = new BigDecimal("1200.00");
     private static final BigDecimal BID_1400 = new BigDecimal("1400.00");
     private static final UUID AUCTION_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
@@ -414,7 +415,7 @@ class BiddingCommandServicePlaceBidTest {
             .id(LISTING_ID)
             .title("Vintage Camera")
             .description("Well kept camera")
-            .price(new BigDecimal("1000.00"))
+            .price(STARTING_PRICE)
             .category(ListingCategory.ELECTRONICS)
             .seller(seller)
             .status(listingStatus)
@@ -425,7 +426,7 @@ class BiddingCommandServicePlaceBidTest {
             .id(AUCTION_ID)
             .listing(listing)
             .status(auctionStatus)
-            .startingPrice(new BigDecimal("1000.00"))
+            .startingPrice(STARTING_PRICE)
             .reservePrice(new BigDecimal("1500.00"))
             .minimumBidIncrement(new BigDecimal("100.00"))
             .durationMinutes(60L)
