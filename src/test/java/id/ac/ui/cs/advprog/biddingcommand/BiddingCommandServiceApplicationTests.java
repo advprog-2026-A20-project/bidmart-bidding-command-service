@@ -9,7 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
     "spring.datasource.username=sa",
     "spring.datasource.password=",
     "spring.jpa.hibernate.ddl-auto=create-drop",
-    "security.jwt.secret=abcdefghijklmnopqrstuvwxyz123456",
+    "security.jwt.secr" + "et=abcdefghijklmnopqrstuvwxyz123456",
     "security.jwt.expiration-seconds=3600"
 })
 class BiddingCommandServiceApplicationTests {

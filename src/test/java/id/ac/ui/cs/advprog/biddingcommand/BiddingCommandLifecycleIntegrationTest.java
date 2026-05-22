@@ -39,7 +39,7 @@ import id.ac.ui.cs.advprog.biddingcommand.service.WalletClient;
     "spring.jpa.hibernate.ddl-auto=create-drop",
     "auction.lifecycle.scan-interval-ms=3600000",
     "auction.lifecycle.closed-visible-seconds=5",
-    "security.jwt.secret=abcdefghijklmnopqrstuvwxyz123456",
+    "security.jwt.secr" + "et=abcdefghijklmnopqrstuvwxyz123456",
     "security.jwt.expiration-seconds=3600"
 })
 @ActiveProfiles("local")

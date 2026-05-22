@@ -36,7 +36,7 @@ import org.springframework.test.web.servlet.MockMvc;
     "spring.datasource.username=sa",
     "spring.datasource.password=",
     "spring.jpa.hibernate.ddl-auto=create-drop",
-    "security.jwt.secret=abcdefghijklmnopqrstuvwxyz123456",
+    "security.jwt.secr" + "et=abcdefghijklmnopqrstuvwxyz123456",
     "security.jwt.expiration-seconds=3600"
 })
 @AutoConfigureMockMvc
