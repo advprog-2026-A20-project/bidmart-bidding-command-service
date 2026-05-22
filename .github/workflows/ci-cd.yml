@@ -47,8 +47,7 @@ jobs:
           ls -lah build/reports/jacoco/test/
           test -f build/reports/jacoco/test/jacocoTestReport.xml
 
-      - name: SonarQube Cloud scan
-        if: ${{ secrets.SONAR_TOKEN != '' }}
+      - name: Run SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_ORGANIZATION: ${{ env.SONAR_ORGANIZATION }}

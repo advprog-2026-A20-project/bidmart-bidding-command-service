@@ -54,7 +54,7 @@ jacocoTestReport {
 
 sonar {
     properties {
-        property 'sonar.projectKey', System.getenv('SONAR_PROJECT_KEY') ?: "${project.group}_${rootProject.name}"
+        property 'sonar.projectKey', System.getenv('SONAR_PROJECT_KEY') ?: 'advprog-2026-A20-project_bidmart-bidding-command-service'
         property 'sonar.organization', System.getenv('SONAR_ORGANIZATION') ?: 'advprog-2026-a20-project26'
         property 'sonar.host.url', 'https://sonarcloud.io'
         property 'sonar.coverage.jacoco.xmlReportPaths', 'build/reports/jacoco/test/jacocoTestReport.xml'
