@@ -1,5 +1,14 @@
 package id.ac.ui.cs.advprog.biddingcommand.service;
 
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Objects;
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
 import id.ac.ui.cs.advprog.biddingcommand.dto.AuctionCreateRequest;
 import id.ac.ui.cs.advprog.biddingcommand.dto.BidPlaceRequest;
 import id.ac.ui.cs.advprog.biddingcommand.model.Auction;
@@ -9,13 +18,6 @@ import id.ac.ui.cs.advprog.biddingcommand.model.ListingStatus;
 import id.ac.ui.cs.advprog.biddingcommand.model.Role;
 import id.ac.ui.cs.advprog.biddingcommand.model.User;
 import id.ac.ui.cs.advprog.biddingcommand.repository.UserRepository;
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.Instant;
-import java.util.Objects;
-import java.util.UUID;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 final class AuctionValidator {
 
@@ -139,8 +141,8 @@ final class AuctionValidator {
     boolean shouldCloseAuction(Auction auction, Instant now) {
         return isBiddableStatus(auction.getStatus())
             && auction.getEndsAt() != null
-            && !auction.getEndsAt().isAfter(now);
-    }
+            && (auction.getEndsAt().equals(now) || auction.getEndsAt().isBefore(now));
+    }  
 
     BigDecimal calculateNextMinimumBid(Auction auction, Bid leadingBid) {
         if (leadingBid == null) {

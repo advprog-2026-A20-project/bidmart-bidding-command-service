@@ -1,9 +1,20 @@
 package id.ac.ui.cs.advprog.biddingcommand;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Transactional;
 
 import id.ac.ui.cs.advprog.biddingcommand.model.Auction;
 import id.ac.ui.cs.advprog.biddingcommand.model.AuctionStatus;
@@ -19,16 +30,6 @@ import id.ac.ui.cs.advprog.biddingcommand.repository.ListingRepository;
 import id.ac.ui.cs.advprog.biddingcommand.repository.UserRepository;
 import id.ac.ui.cs.advprog.biddingcommand.service.BiddingCommandService;
 import id.ac.ui.cs.advprog.biddingcommand.service.WalletClient;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
     "spring.datasource.url=jdbc:h2:mem:biddinglifecycle;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
@@ -156,6 +157,19 @@ class BiddingCommandLifecycleIntegrationTest {
             org.mockito.ArgumentMatchers.eq(auction.getId()),
             org.mockito.ArgumentMatchers.any()
         );
+    }
+
+    @Test
+    void expiredExtendedAuctionMovesToClosedState() {
+        Auction auction = auctionRepository.save(auction(AuctionStatus.EXTENDED, ListingStatus.EXTENDED, "1000.00"));
+        auction.setEndsAt(Instant.now().minus(1, ChronoUnit.MINUTES));
+        auctionRepository.saveAndFlush(auction);
+
+        biddingCommandService.processAuctionLifecycle();
+
+        Auction refreshed = auctionRepository.findByIdWithListingAndSeller(auction.getId()).orElseThrow();
+        assertEquals(AuctionStatus.CLOSED, refreshed.getStatus());
+        assertEquals(ListingStatus.CLOSED, refreshed.getListing().getStatus());
     }
 
     private User user(String email, Role role) {
