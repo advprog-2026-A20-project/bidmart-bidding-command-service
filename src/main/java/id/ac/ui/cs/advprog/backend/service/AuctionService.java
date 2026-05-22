@@ -179,6 +179,17 @@ public class AuctionService {
         return lockedAuction;
     }
 
+    @Transactional(readOnly = true)
+    public List<UUID> findExpiredOpenAuctionIds() {
+        return auctionRepository.findExpiredAuctionIds(List.of(AuctionStatus.ACTIVE, AuctionStatus.EXTENDED), Instant.now(clock));
+    }
+
+    @Transactional
+    public void closeExpiredAuction(UUID auctionId) {
+        Auction lockedAuction = loadAuctionForUpdate(auctionId);
+        closeAuctionIfExpired(lockedAuction, Instant.now(clock));
+    }
+
     private void closeAuctionIfExpired(Auction auction, Instant now) {
         if (shouldCloseAuction(auction, now)) {
             closeAuctionInternal(auction, now);
@@ -370,6 +381,7 @@ public class AuctionService {
     private void resolveAuctionOutcome(Auction auction, Bid leadingBid, boolean reserveMet) {
         if (reserveMet) {
             walletGateway.captureFunds(leadingBid.getBidder().getId(), auction.getId(), leadingBid.getAmount());
+            walletGateway.creditFunds(auction.getListing().getSeller().getId(), auction.getId(), leadingBid.getAmount());
             auction.setStatus(AuctionStatus.WON);
             return;
         }

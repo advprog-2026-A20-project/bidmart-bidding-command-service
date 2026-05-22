@@ -10,5 +10,7 @@ public interface WalletGateway {
     void releaseFunds(UUID userId, UUID auctionId, BigDecimal amount);
 
     void captureFunds(UUID userId, UUID auctionId, BigDecimal amount);
+
+    void creditFunds(UUID userId, UUID auctionId, BigDecimal amount);
 }
 

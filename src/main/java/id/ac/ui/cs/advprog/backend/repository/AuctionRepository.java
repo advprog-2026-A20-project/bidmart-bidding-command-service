@@ -46,4 +46,16 @@ public interface AuctionRepository extends JpaRepository<Auction, UUID> {
         where a.id = :auctionId
         """)
     Optional<Auction> findByIdWithListingAndSellerForUpdate(@Param("auctionId") UUID auctionId);
+
+    @Query("""
+        select a.id
+        from Auction a
+        where a.status in :statuses
+          and a.endsAt is not null
+          and a.endsAt <= :now
+        """)
+    List<UUID> findExpiredAuctionIds(
+        @Param("statuses") Collection<AuctionStatus> statuses,
+        @Param("now") java.time.Instant now
+    );
 }
