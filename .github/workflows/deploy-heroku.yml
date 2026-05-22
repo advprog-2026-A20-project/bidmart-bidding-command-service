@@ -16,12 +16,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate Heroku secret
+        run: |
+          if [ -z "${HEROKU_API_KEY:-}" ]; then
+            echo "HEROKU_API_KEY is empty or not available to this workflow"
+            exit 1
+          fi
+          echo "HEROKU_API_KEY detected"
+
       - name: Install Heroku CLI
         run: curl https://cli-assets.heroku.com/install.sh | sh
 
       - name: Login to Heroku Container Registry
-        run: |
-          echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
+        run: heroku container:login
 
       - name: Build and push image
         run: heroku container:push web --app "$HEROKU_APP_NAME"
