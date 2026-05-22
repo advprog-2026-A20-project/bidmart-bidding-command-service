@@ -1,18 +1,20 @@
 package id.ac.ui.cs.advprog.biddingcommand.service;
 
-import id.ac.ui.cs.advprog.biddingcommand.dto.WalletCommandRequest;
 import java.math.BigDecimal;
 import java.util.UUID;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
+
+import id.ac.ui.cs.advprog.biddingcommand.dto.WalletCommandRequest;
 
 @Component
 public class WalletClient {
@@ -49,20 +51,39 @@ public class WalletClient {
         post("/wallet/internal/credit", userId, auctionId, amount);
     }
 
-    private void post(String path, UUID userId, UUID auctionId, BigDecimal amount) {
-        HttpHeaders headers = new HttpHeaders();
-        if (internalToken != null && !internalToken.isBlank()) {
-            headers.set("X-Internal-Token", internalToken);
-        }
-        WalletCommandRequest request = new WalletCommandRequest(userId, auctionId, amount);
-        try {
-            restTemplate.postForEntity(walletBaseUrl + path, new HttpEntity<>(request, headers), Void.class);
-        } catch (ResourceAccessException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Wallet service unavailable");
-        } catch (RestClientResponseException exception) {
-            throw mapWalletError(exception.getStatusCode());
-        }
+private void post(String path, UUID userId, UUID auctionId, BigDecimal amount) {
+    HttpHeaders headers = new HttpHeaders();
+    if (internalToken != null && !internalToken.isBlank()) {
+        headers.set("X-Internal-Token", internalToken);
     }
+
+    WalletCommandRequest request = new WalletCommandRequest(userId, auctionId, amount);
+
+    try {
+        restTemplate.postForEntity(
+            walletBaseUrl + path,
+            new HttpEntity<>(request, headers),
+            Void.class
+        );
+    } catch (HttpStatusCodeException ex) {
+        throw new ResponseStatusException(
+            ex.getStatusCode(),
+            safeWalletErrorMessage(ex)
+        );
+    } catch (ResourceAccessException ex) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_GATEWAY,
+            "Wallet service unavailable"
+        );
+    }
+}
+
+private String safeWalletErrorMessage(HttpStatusCodeException ex) {
+    if (ex.getStatusCode().is4xxClientError()) {
+        return "Wallet service rejected the request";
+    }
+    return "Wallet service error";
+}
 
     private ResponseStatusException mapWalletError(HttpStatusCode statusCode) {
         HttpStatus status = HttpStatus.valueOf(statusCode.value());
