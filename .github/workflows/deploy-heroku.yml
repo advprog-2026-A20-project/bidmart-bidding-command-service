@@ -25,14 +25,7 @@ jobs:
           echo "HEROKU_API_KEY detected"
 
       - name: Setup Node
-        uses: actions/setup-node
-
-      - name: Install Heroku CLI
-        run: npm install -g heroku
-
-      - name: Verify Heroku CLI
-        run: heroku --version|- name: Setup Node
-        uses: actions/setup-node
+        uses: actions/setup-node@v4
 
       - name: Install Heroku CLI
         run: npm install -g heroku
